@@ -322,11 +322,65 @@ export const initialCustomers: Customer[] = [
   }
 ];
 
+export type NormalizedRole = 'admin' | 'manager' | 'sales';
+
+export const normalizeRole = (role?: string): NormalizedRole => {
+  const clean = String(role || '').trim().toLowerCase();
+  if (clean === 'admin' || clean === 'administrator' || clean === 'superadmin') return 'admin';
+  if (clean === 'manager' || clean === 'supervisor') return 'manager';
+  return 'sales';
+};
+
+export const isSupervisoryRole = (role?: string): boolean => {
+  const norm = normalizeRole(role);
+  return norm === 'admin' || norm === 'manager';
+};
+
+export const isSalesRole = (role?: string): boolean => {
+  return normalizeRole(role) === 'sales';
+};
+
+export const getDisplayRole = (role?: string): string => {
+  const norm = normalizeRole(role);
+  if (norm === 'admin') return 'Administrator';
+  if (norm === 'manager') return 'Manager';
+  return 'Sales Rep';
+};
+
+export const checkDocumentOwnership = (
+  quote: Partial<Quotation> | null | undefined, 
+  user: User | null | undefined
+): boolean => {
+  if (!quote || !user) return false;
+  if (isSupervisoryRole(user.role)) return true; // Supervisory roles have full global access
+  
+  const userUsername = (user.username || '').trim().toLowerCase();
+  const userId = (user.id || '').trim().toLowerCase();
+  const userName = (user.name || '').trim().toLowerCase();
+  const userEmail = (user.email || '').trim().toLowerCase();
+
+  const qCreatedBy = (quote.createdBy || '').trim().toLowerCase();
+  const qSalesId = (quote.salesId || '').trim().toLowerCase();
+  const qSalesName = (quote.salesName || '').trim().toLowerCase();
+  const qCreatedByName = (quote.createdByName || '').trim().toLowerCase();
+  const qSalesEmail = (quote.salesEmail || quote.createdByEmail || '').trim().toLowerCase();
+
+  return (
+    qCreatedBy === userUsername ||
+    qCreatedBy === userId ||
+    qSalesId === userId ||
+    qSalesId === userUsername ||
+    (Boolean(qSalesName) && (qSalesName === userName || qSalesName.includes(userUsername))) ||
+    (Boolean(qCreatedByName) && qCreatedByName === userName) ||
+    (Boolean(userEmail) && qSalesEmail === userEmail)
+  );
+};
+
 export const initialUsers: User[] = [
-  { id: 'U-001', username: 'admin', password: '123', name: 'Andi Triyanto (Manager)', role: 'manager' },
-  { id: 'U-002', username: 'sales', password: '123', name: 'Siti Rahma (Sales)', role: 'sales' },
-  { id: 'U-003', username: 'budi', password: '123', name: 'Budi Santoso (Sales)', role: 'sales' },
-  { id: 'U-004', username: 'hendra', password: '123', name: 'Hendra Pratama (Sales)', role: 'sales' }
+  { id: 'U-001', username: 'admin', password: '123', name: 'Andi Triyanto (Administrator / Manager)', role: 'administrator', email: 'admin@sra.co.id', salesId: 'U-001' },
+  { id: 'U-002', username: 'sales', password: '123', name: 'Siti Rahma (Sales)', role: 'sales', email: 'sales@sra.co.id', salesId: 'U-002' },
+  { id: 'U-003', username: 'budi', password: '123', name: 'Budi Santoso (Sales)', role: 'sales', email: 'budi@sra.co.id', salesId: 'U-003' },
+  { id: 'U-004', username: 'hendra', password: '123', name: 'Hendra Pratama (Sales)', role: 'sales', email: 'hendra@sra.co.id', salesId: 'U-004' }
 ];
 
 export const initialQuotations: Quotation[] = [

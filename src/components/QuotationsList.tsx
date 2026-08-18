@@ -7,7 +7,10 @@ import {
   Check, Store, UserCheck, Users, ShieldCheck, Shield
 } from 'lucide-react';
 import { Quotation, User, Item } from '../types';
-import { formatIDR, getDueReminderInfo, calculateDueDate } from '../utils/helpers';
+import { 
+  formatIDR, getDueReminderInfo, calculateDueDate, 
+  isSupervisoryRole, checkDocumentOwnership 
+} from '../utils/helpers';
 import { exportQuotationsToExcel } from '../utils/excelHelpers';
 
 interface QuotationsListProps {
@@ -51,15 +54,15 @@ export function QuotationsList({
   const [dateFilter, setDateFilter] = useState<'ALL' | 'THIS_MONTH' | 'LAST_30'>('ALL');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Quotation; direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
 
-  const isManager = currentUser.role === 'manager' || currentUser.role === 'admin';
+  const isManager = isSupervisoryRole(currentUser.role);
 
   // Extract comprehensive list of all registered sales users + anyone who created quotations
   const availableSalesReps = useMemo(() => {
     const map = new Map<string, { id: string; username: string; name: string; count: number }>();
     
-    // 1. Populate all registered users who have role 'sales'
+    // 1. Populate all registered users who have role 'sales' or any registered sales
     (users || []).forEach(u => {
-      if (u && u.role === 'sales') {
+      if (u && (u.role === 'sales' || !isSupervisoryRole(u.role))) {
         const usernameKey = (u.username || '').trim().toLowerCase();
         if (usernameKey) {
           map.set(usernameKey, {
@@ -77,7 +80,7 @@ export function QuotationsList({
       if (!q) return;
       const rawUser = (q.createdBy || '').trim();
       const rawKey = rawUser.toLowerCase();
-      const rawName = (q.salesName || q.createdBy || 'Sales').trim();
+      const rawName = (q.salesName || q.createdByName || q.createdBy || 'Sales').trim();
 
       if (rawKey && map.has(rawKey)) {
         map.get(rawKey)!.count++;
@@ -150,19 +153,42 @@ export function QuotationsList({
     let filtered = Array.isArray(quotations) ? [...quotations] : [];
     
     if (!isManager) {
-      filtered = filtered.filter(q => q && (q.createdBy === currentUser?.username || q.salesName === currentUser?.name));
+      filtered = filtered.filter(q => checkDocumentOwnership(q, currentUser));
     } else if (salesFilter !== 'Semua') {
-      const targetRep = availableSalesReps.find(r => r.username === salesFilter || r.name === salesFilter || r.id === salesFilter);
+      const target = salesFilter.trim().toLowerCase();
+      const targetRep = availableSalesReps.find(r => 
+        r.username.toLowerCase() === target || 
+        r.name.toLowerCase() === target || 
+        r.id.toLowerCase() === target
+      );
       filtered = filtered.filter(q => {
         if (!q) return false;
+        const qCreated = (q.createdBy || '').trim().toLowerCase();
+        const qSalesName = (q.salesName || '').trim().toLowerCase();
+        const qSalesId = (q.salesId || '').trim().toLowerCase();
+        const qCreatedByName = (q.createdByName || '').trim().toLowerCase();
+
         if (targetRep) {
-          const qCreated = (q.createdBy || '').trim().toLowerCase();
-          const qName = (q.salesName || '').trim().toLowerCase();
-          const repUsername = (targetRep.username || '').trim().toLowerCase();
-          const repName = (targetRep.name || '').trim().toLowerCase();
-          return qCreated === repUsername || qCreated === repName || qName === repName || qName === repUsername;
+          const tUser = targetRep.username.toLowerCase();
+          const tName = targetRep.name.toLowerCase();
+          const tId = targetRep.id.toLowerCase();
+          return (
+            qCreated === tUser ||
+            qCreated === tName ||
+            qCreated === tId ||
+            qSalesName === tName ||
+            qSalesName === tUser ||
+            qSalesId === tId ||
+            qSalesId === tUser ||
+            qCreatedByName === tName
+          );
         }
-        return q.createdBy === salesFilter || q.salesName === salesFilter;
+        return (
+          qCreated === target ||
+          qSalesName === target ||
+          qSalesId === target ||
+          qCreatedByName === target
+        );
       });
     }
 
@@ -215,7 +241,9 @@ export function QuotationsList({
           (q?.customerEmail && q.customerEmail.toLowerCase().includes(query)) ||
           (q?.attnName && q.attnName.toLowerCase().includes(query)) ||
           (q?.salesName && q.salesName.toLowerCase().includes(query)) ||
-          (q?.createdBy && q.createdBy.toLowerCase().includes(query))
+          (q?.createdBy && q.createdBy.toLowerCase().includes(query)) ||
+          (q?.createdByName && q.createdByName.toLowerCase().includes(query)) ||
+          (q?.salesEmail && q.salesEmail.toLowerCase().includes(query))
         )
       );
     }
@@ -229,7 +257,7 @@ export function QuotationsList({
     });
 
     return filtered;
-  }, [quotations, currentUser, isManager, docTypeFilter, statusFilter, entityFilter, dateFilter, search, sortConfig]);
+  }, [quotations, currentUser, isManager, salesFilter, availableSalesReps, docTypeFilter, statusFilter, entityFilter, dateFilter, search, sortConfig]);
 
   const handleSort = (key: keyof Quotation) => {
     setSortConfig({ 

@@ -1,6 +1,65 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isSupervisory() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'admin' ||
+        request.auth.token.role == 'administrator' ||
+        request.auth.token.role == 'manager'
+      );
+    }
+
+    function isOwner(resourceData) {
+      return isAuthenticated() && (
+        resourceData.createdBy == request.auth.uid ||
+        resourceData.createdBy == request.auth.token.username ||
+        resourceData.salesId == request.auth.uid
+      );
+    }
+
+    // Quotations Collection
+    match /quotations/{quotationId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Product Catalog Items
+    match /items/{itemId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Customer Database
+    match /customers/{customerId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // System Users
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Settings
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Audit Logs
+    match /activityLogs/{logId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Catch-all
     match /{document=**} {
       allow read, write: if true;
     }

@@ -7,7 +7,8 @@ import {
 import { Quotation, Item, Customer, Settings, User, QuotationItem } from '../types';
 import { 
   getSraGroupEntities, formatIDR, generateID, calculateDueDate, 
-  getCustomerCreditStatus, parsePaymentTermDays, defaultSettings 
+  getCustomerCreditStatus, parsePaymentTermDays, defaultSettings,
+  isSupervisoryRole
 } from '../utils/helpers';
 import { ItemSelect } from './ItemSelect';
 
@@ -35,7 +36,7 @@ export function CreateQuotation({
   currentUser 
 }: CreateQuotationProps) {
   const entities = getSraGroupEntities(settings || defaultSettings);
-  const isManager = currentUser?.role === 'manager' || currentUser?.role === 'admin';
+  const isManager = isSupervisoryRole(currentUser?.role);
 
   // Sales PIC Attribution (Manager can reassign/assign to any sales rep)
   const [assignedSalesUsername, setAssignedSalesUsername] = useState<string>(() => {
@@ -301,8 +302,16 @@ export function CreateQuotation({
       companyAddress: currentEntity?.companyAddress || '', 
       bankDetails: currentEntity?.bankDetails || '',
       createdBy: finalCreatedBy, 
+      createdByName: finalSalesName,
+      createdByEmail: assignedUserObj?.email || currentUser?.email || '',
       createdByRole: finalCreatedByRole,
+      salesId: assignedUserObj?.salesId || assignedUserObj?.id || finalCreatedBy,
       salesName: finalSalesName,
+      salesEmail: assignedUserObj?.email || currentUser?.email || '',
+      createdAt: initialData?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUser?.username || 'user',
+      updatedByName: currentUser?.name || currentUser?.username || 'User',
       date: isSoMode ? (orderDate || quoteDate) : quoteDate, 
       status: isSoMode 
         ? (initialData?.status === 'Accepted' || initialData?.status === 'SO_Confirmed' ? initialData.status : 'SO_Confirmed') 

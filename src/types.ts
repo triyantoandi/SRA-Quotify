@@ -35,7 +35,9 @@ export interface User {
   username: string;
   password?: string;
   name: string;
-  role: 'manager' | 'sales' | string;
+  email?: string;
+  role: 'administrator' | 'admin' | 'manager' | 'sales' | string;
+  salesId?: string;
 }
 
 export interface QuotationItem {
@@ -54,9 +56,20 @@ export interface Quotation {
   companyNpwp?: string;
   companyAddress?: string;
   bankDetails?: string;
+  
+  // Ownership & RBAC Creator Attribution
   createdBy: string;
+  createdByName?: string;
+  createdByEmail?: string;
   createdByRole?: string;
+  salesId?: string;
   salesName?: string;
+  salesEmail?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  updatedByName?: string;
+
   date: string; // Tanggal pembuatan dokumen
   status: 'Draft' | 'Sent' | 'Accepted' | 'Rejected' | 'SO_Confirmed' | string;
   customerName: string;
@@ -111,10 +124,20 @@ export interface Settings {
 export interface ActivityLog {
   id: string;
   timestamp: string;
-  username: string;
-  name: string;
+  userId?: string;
+  userName?: string;
+  userEmail?: string;
+  username?: string; // Backward compatibility
+  name?: string; // Backward compatibility
+  role?: string;
   action: string;
-  details: string;
+  module?: string;
+  documentType?: 'QUOTATION' | 'SALES_ORDER' | 'CUSTOMER' | 'ITEM' | 'USER' | 'SETTINGS' | 'AUTH' | string;
+  documentId?: string;
+  documentNumber?: string;
+  description?: string;
+  details?: string;
+  metadata?: Record<string, any>;
 }
 
 export interface SraEntity {

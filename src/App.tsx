@@ -5,7 +5,8 @@ import {
 } from 'lucide-react';
 import { User, Item, Customer, Quotation, Settings, ActivityLog } from './types';
 import { 
-  injectGlobalStyles, initialItems, initialCustomers, initialUsers, initialQuotations, defaultSettings 
+  injectGlobalStyles, initialItems, initialCustomers, initialUsers, initialQuotations, defaultSettings,
+  isSupervisoryRole, normalizeRole
 } from './utils/helpers';
 import { 
   subscribeCollection, subscribeDoc, saveFirestoreDoc, deleteFirestoreDoc 
@@ -139,17 +140,38 @@ export default function App() {
     }
   };
 
-  const logActivity = (action: string, details: string) => {
+  const logActivity = (
+    action: string, 
+    details: string,
+    docMeta?: {
+      module?: string;
+      documentType?: string;
+      documentId?: string;
+      documentNumber?: string;
+      description?: string;
+      metadata?: Record<string, any>;
+    }
+  ) => {
     if (!currentUser) return;
     const log: ActivityLog = { 
-      id: `L-${Date.now()}`, 
+      id: `L-${Date.now()}-${Math.floor(Math.random() * 1000)}`, 
       timestamp: new Date().toLocaleString('id-ID'), 
+      userId: currentUser.id || currentUser.username,
+      userName: currentUser.name || currentUser.username,
+      userEmail: currentUser.email || `${currentUser.username}@sra.co.id`,
       username: currentUser.username, 
       name: currentUser.name, 
+      role: currentUser.role,
       action, 
-      details 
+      details: docMeta?.description || details,
+      module: docMeta?.module || 'SYSTEM',
+      documentType: docMeta?.documentType,
+      documentId: docMeta?.documentId,
+      documentNumber: docMeta?.documentNumber,
+      description: details,
+      metadata: docMeta?.metadata
     };
-    setActivityLogs(p => [log, ...p]); 
+    setActivityLogs(p => [log, ...(Array.isArray(p) ? p : [])]); 
     syncToCloud('saveLog', 'log', log);
   };
 
@@ -174,11 +196,14 @@ export default function App() {
           const candidateUsers = [...(Array.isArray(users) ? users : []), ...initialUsers];
           const usr = candidateUsers.find(x => x && (x.username || '').trim().toLowerCase() === cleanU && String(x.password || '').trim() === cleanP); 
           if (usr) { 
+            const rawRole = usr.role || 'sales';
             const safeUser: User = {
               id: usr.id || `U-${Date.now()}`,
               username: usr.username,
               name: usr.name || usr.username,
-              role: usr.role === 'manager' ? 'manager' : 'sales',
+              email: usr.email || `${usr.username}@sra.co.id`,
+              role: rawRole,
+              salesId: usr.salesId || usr.id || usr.username,
               password: usr.password
             };
             setCurrentUser(safeUser);
@@ -186,7 +211,7 @@ export default function App() {
             setViewingQuote(null);
             setEditingQuote(null);
             showToastMsg(`Selamat datang, ${safeUser.name}`); 
-            logActivity('LOGIN', `Login sukses (${safeUser.role})`); 
+            logActivity('LOGIN', `Login sukses sebagai ${safeUser.role.toUpperCase()}`); 
           } else {
             showToastMsg('Username atau password tidak sesuai! Gunakan admin / 123', 'error'); 
           }
@@ -372,7 +397,7 @@ export default function App() {
         />
       );
     }
-    const isManagerRole = currentUser.role === 'manager' || currentUser.role === 'admin';
+    const isManagerRole = isSupervisoryRole(currentUser?.role);
 
     if (activeTab === 'audit_logs' && isManagerRole) {
       return (
@@ -432,7 +457,7 @@ export default function App() {
     );
   };
 
-  const isManager = currentUser.role === 'manager' || currentUser.role === 'admin';
+  const isManager = isSupervisoryRole(currentUser?.role);
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },

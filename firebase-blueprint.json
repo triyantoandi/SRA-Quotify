@@ -28,7 +28,7 @@
         }
       },
       "quotations": {
-        "description": "Sales quotations",
+        "description": "Sales quotations and orders with role-based access control metadata",
         "document": {
           "fields": {
             "id": { "type": "string", "description": "Quotation ID" },
@@ -47,7 +47,14 @@
             "total": { "type": "number", "description": "Total amount" },
             "notes": { "type": "string", "description": "Notes or terms" },
             "status": { "type": "string", "description": "Quotation status" },
-            "createdBy": { "type": "string", "description": "Creator user" }
+            "createdBy": { "type": "string", "description": "Creator username" },
+            "createdByName": { "type": "string", "description": "Creator full name" },
+            "createdByEmail": { "type": "string", "description": "Creator email" },
+            "salesId": { "type": "string", "description": "Sales user identifier" },
+            "salesName": { "type": "string", "description": "Sales representative full name" },
+            "salesEmail": { "type": "string", "description": "Sales representative email" },
+            "createdAt": { "type": "string", "description": "Creation timestamp" },
+            "updatedAt": { "type": "string", "description": "Last update timestamp" }
           }
         }
       },
@@ -60,26 +67,34 @@
         }
       },
       "users": {
-        "description": "System users",
+        "description": "System users and role management",
         "document": {
           "fields": {
             "id": { "type": "string", "description": "User ID" },
             "username": { "type": "string", "description": "Username" },
             "name": { "type": "string", "description": "Full name" },
-            "role": { "type": "string", "description": "Role" }
+            "email": { "type": "string", "description": "Email address" },
+            "role": { "type": "string", "description": "System role (administrator, manager, sales)" },
+            "salesId": { "type": "string", "description": "Sales identifier" }
           }
         }
       },
       "activityLogs": {
-        "description": "Audit activity logs",
+        "description": "Audit activity logs with RBAC context",
         "document": {
           "fields": {
             "id": { "type": "string", "description": "Log ID" },
             "timestamp": { "type": "string", "description": "Timestamp" },
+            "userId": { "type": "string", "description": "User ID" },
+            "userName": { "type": "string", "description": "Full name" },
+            "userEmail": { "type": "string", "description": "Email" },
             "username": { "type": "string", "description": "Username" },
-            "name": { "type": "string", "description": "Name" },
+            "role": { "type": "string", "description": "User role" },
             "action": { "type": "string", "description": "Action name" },
-            "details": { "type": "string", "description": "Action details" }
+            "details": { "type": "string", "description": "Action details" },
+            "module": { "type": "string", "description": "Application module" },
+            "documentType": { "type": "string", "description": "Document type" },
+            "documentId": { "type": "string", "description": "Document ID" }
           }
         }
       }

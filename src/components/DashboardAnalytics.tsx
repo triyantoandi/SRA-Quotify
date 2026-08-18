@@ -6,7 +6,10 @@ import {
   ShieldCheck, UserCheck, ClipboardList, ShieldAlert, Check
 } from 'lucide-react';
 import { Quotation, Item, Customer, User, Settings } from '../types';
-import { formatIDR, getSraGroupEntities, defaultSettings } from '../utils/helpers';
+import { 
+  formatIDR, getSraGroupEntities, defaultSettings, 
+  isSupervisoryRole, checkDocumentOwnership 
+} from '../utils/helpers';
 import { exportQuotationsToExcel } from '../utils/excelHelpers';
 
 interface DashboardAnalyticsProps {
@@ -41,7 +44,7 @@ export function DashboardAnalytics({
   const [timeFilter, setTimeFilter] = useState<'ALL' | 'THIS_MONTH' | 'LAST_30'>('ALL');
 
   const entities = getSraGroupEntities(settings || defaultSettings);
-  const isManager = currentUser?.role === 'manager' || currentUser?.role === 'admin';
+  const isManager = isSupervisoryRole(currentUser?.role);
 
   const safeQuotations = Array.isArray(quotations) ? quotations : [];
   const safeItems = Array.isArray(items) ? items : [];
@@ -50,12 +53,21 @@ export function DashboardAnalytics({
   // Filter based on user role & active filters
   const filteredQuotations = safeQuotations.filter(q => {
     if (!q) return false;
-    if (!isManager && q.createdBy && currentUser?.username && q.createdBy !== currentUser.username) return false;
+    if (!isManager && !checkDocumentOwnership(q, currentUser)) return false;
     if (isManager && salesFilter !== 'ALL') {
       const qCreated = (q.createdBy || '').toLowerCase();
       const qSales = (q.salesName || '').toLowerCase();
+      const qCreatedByName = (q.createdByName || '').toLowerCase();
+      const qSalesId = (q.salesId || '').toLowerCase();
       const sTarget = salesFilter.toLowerCase();
-      if (qCreated !== sTarget && qSales !== sTarget) return false;
+      if (
+        qCreated !== sTarget && 
+        qSales !== sTarget && 
+        qCreatedByName !== sTarget && 
+        qSalesId !== sTarget
+      ) {
+        return false;
+      }
     }
     if (entityFilter !== 'ALL' && q.issuingCompany !== entityFilter) return false;
     
