@@ -84,7 +84,8 @@ export function subscribeCollection<T extends { id: string }>(
         for (const item of initialFallback) {
           if (item && item.id) {
             try {
-              await setDoc(doc(db, collectionName, String(item.id)), item, { merge: true });
+              const cleanItem = sanitizeForFirestore(item);
+              await setDoc(doc(db, collectionName, String(item.id)), cleanItem, { merge: true });
             } catch (e) {
               console.warn(`Error seeding doc ${item.id} in ${collectionName}:`, e);
             }
@@ -126,7 +127,8 @@ export function subscribeDoc<T>(
       if (!snapshot.exists() && initialFallback) {
         onData(initialFallback);
         try {
-          await setDoc(docRef, initialFallback, { merge: true });
+          const cleanFallback = sanitizeForFirestore(initialFallback);
+          await setDoc(docRef, cleanFallback, { merge: true });
         } catch (e) {
           console.warn(`Error seeding doc ${collectionName}/${docId}:`, e);
         }
@@ -149,10 +151,32 @@ export function subscribeDoc<T>(
   return unsubscribe;
 }
 
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data
+      .filter(item => item !== undefined)
+      .map(item => sanitizeForFirestore(item)) as unknown as T;
+  }
+  if (typeof data === 'object' && !(data instanceof Date)) {
+    const cleanObj: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== undefined) {
+        cleanObj[key] = sanitizeForFirestore(value);
+      }
+    }
+    return cleanObj as T;
+  }
+  return data;
+}
+
 export async function saveFirestoreDoc(collectionName: string, docId: string, data: any) {
   try {
+    const cleanData = sanitizeForFirestore(data);
     const docRef = doc(db, collectionName, String(docId));
-    await setDoc(docRef, data, { merge: true });
+    await setDoc(docRef, cleanData, { merge: true });
   } catch (err) {
     console.error(`Error saving to Firestore [${collectionName}/${docId}]:`, err);
     handleFirestoreError(err, OperationType.WRITE, `${collectionName}/${docId}`);

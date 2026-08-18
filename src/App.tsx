@@ -165,11 +165,11 @@ export default function App() {
       action, 
       details: docMeta?.description || details,
       module: docMeta?.module || 'SYSTEM',
-      documentType: docMeta?.documentType,
-      documentId: docMeta?.documentId,
-      documentNumber: docMeta?.documentNumber,
       description: details,
-      metadata: docMeta?.metadata
+      ...(docMeta?.documentType ? { documentType: docMeta.documentType } : {}),
+      ...(docMeta?.documentId ? { documentId: docMeta.documentId } : {}),
+      ...(docMeta?.documentNumber ? { documentNumber: docMeta.documentNumber } : {}),
+      ...(docMeta?.metadata ? { metadata: docMeta.metadata } : {})
     };
     setActivityLogs(p => [log, ...(Array.isArray(p) ? p : [])]); 
     syncToCloud('saveLog', 'log', log);
