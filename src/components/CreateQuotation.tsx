@@ -15,6 +15,7 @@ interface CreateQuotationProps {
   items: Item[];
   customers: Customer[];
   quotations?: Quotation[];
+  users?: User[];
   onSave: (quote: Quotation) => void;
   onCancel: () => void;
   initialData?: Quotation | null;
@@ -26,6 +27,7 @@ export function CreateQuotation({
   items, 
   customers, 
   quotations = [], 
+  users = [],
   onSave, 
   onCancel, 
   initialData, 
@@ -33,7 +35,15 @@ export function CreateQuotation({
   currentUser 
 }: CreateQuotationProps) {
   const entities = getSraGroupEntities(settings || defaultSettings);
-  const isManager = currentUser?.role === 'manager';
+  const isManager = currentUser?.role === 'manager' || currentUser?.role === 'admin';
+
+  // Sales PIC Attribution (Manager can reassign/assign to any sales rep)
+  const [assignedSalesUsername, setAssignedSalesUsername] = useState<string>(() => {
+    return initialData?.createdBy || currentUser?.username || 'user';
+  });
+  const [assignedSalesName, setAssignedSalesName] = useState<string>(() => {
+    return initialData?.salesName || currentUser?.name || currentUser?.username || 'Sales Rep';
+  });
 
   // Document Type: Quotation vs Sales Order (SO)
   const [docType, setDocType] = useState<'QUOTATION' | 'SALES_ORDER'>(() => {
@@ -279,15 +289,20 @@ export function CreateQuotation({
     const currentEntity = entities[issuingCompany] || Object.values(entities)[0];
     const isSoMode = docType === 'SALES_ORDER';
 
+    const finalCreatedBy = isManager ? (assignedSalesUsername || currentUser?.username || 'user') : (initialData?.createdBy || currentUser?.username || 'user');
+    const finalSalesName = isManager ? (assignedSalesName || currentUser?.name || currentUser?.username || 'Sales Rep') : (initialData?.salesName || currentUser?.name || currentUser?.username || 'Sales Rep');
+    const assignedUserObj = users.find(u => u.username === finalCreatedBy);
+    const finalCreatedByRole = assignedUserObj?.role || initialData?.createdByRole || currentUser?.role || 'sales';
+
     const newQuote: Quotation = {
       id: initialData?.id || generateID(isSoMode ? 'SO' : (settings?.quotePrefix || 'QUO')),
       issuingCompany, 
       companyNpwp: currentEntity?.companyNpwp || '', 
       companyAddress: currentEntity?.companyAddress || '', 
       bankDetails: currentEntity?.bankDetails || '',
-      createdBy: initialData?.createdBy || currentUser?.username || 'user', 
-      createdByRole: initialData?.createdByRole || currentUser?.role || 'sales',
-      salesName: initialData?.salesName || currentUser?.name || currentUser?.username || 'Sales Rep',
+      createdBy: finalCreatedBy, 
+      createdByRole: finalCreatedByRole,
+      salesName: finalSalesName,
       date: isSoMode ? (orderDate || quoteDate) : quoteDate, 
       status: isSoMode 
         ? (initialData?.status === 'Accepted' || initialData?.status === 'SO_Confirmed' ? initialData.status : 'SO_Confirmed') 
@@ -416,23 +431,91 @@ export function CreateQuotation({
         </div>
       )}
 
-      {/* PT Penerbit */}
-      <div className="clay-card p-6">
-        <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-800 mb-3 flex items-center gap-1.5">
-          <Building2 className="w-4 h-4 text-emerald-600"/> PT Penerbit (SRA Group)
-        </h3>
-        <select 
-          value={issuingCompany} 
-          onChange={e => setIssuingCompany(e.target.value)} 
-          className="w-full p-3.5 clay-input font-bold text-sm cursor-pointer outline-none"
-        >
-          {Object.keys(entities).map(ptName => (
-            <option key={ptName} value={ptName} className="bg-white text-slate-900">{ptName}</option>
-          ))}
-        </select>
-        <div className="mt-4 pt-4 border-t border-slate-200/60 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-slate-600">
-          <div><span className="text-slate-500 font-medium">NPWP:</span> <span className="font-bold text-slate-900">{activeEntityDetails?.companyNpwp || '-'}</span></div>
-          <div><span className="text-slate-500 font-medium">Rekening:</span> <span className="font-mono font-bold text-slate-900">{activeEntityDetails?.bankDetails ? (activeEntityDetails.bankDetails.split('\n')[1] || activeEntityDetails.bankDetails.split('\n')[0]) : '-'}</span></div>
+      {/* PT Penerbit & Sales PIC Attribution */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="clay-card p-6">
+          <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-800 mb-3 flex items-center gap-1.5">
+            <Building2 className="w-4 h-4 text-emerald-600"/> PT Penerbit (SRA Group)
+          </h3>
+          <select 
+            value={issuingCompany} 
+            onChange={e => setIssuingCompany(e.target.value)} 
+            className="w-full p-3.5 clay-input font-bold text-sm cursor-pointer outline-none"
+          >
+            {Object.keys(entities).map(ptName => (
+              <option key={ptName} value={ptName} className="bg-white text-slate-900">{ptName}</option>
+            ))}
+          </select>
+          <div className="mt-4 pt-4 border-t border-slate-200/60 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-slate-600">
+            <div><span className="text-slate-500 font-medium">NPWP:</span> <span className="font-bold text-slate-900">{activeEntityDetails?.companyNpwp || '-'}</span></div>
+            <div><span className="text-slate-500 font-medium">Rekening:</span> <span className="font-mono font-bold text-slate-900">{activeEntityDetails?.bankDetails ? (activeEntityDetails.bankDetails.split('\n')[1] || activeEntityDetails.bankDetails.split('\n')[0]) : '-'}</span></div>
+          </div>
+        </div>
+
+        {/* Sales PIC Assignment Card (Supervisi Manager) */}
+        <div className="clay-card p-6 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-extrabold uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-blue-700"/> Sales Rep PIC (Penanggung Jawab)
+              </h3>
+              {isManager ? (
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-200 text-amber-900 border border-amber-300">
+                  Manager Override
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-200 text-slate-700">
+                  Sales PIC
+                </span>
+              )}
+            </div>
+
+            {isManager ? (
+              <div className="space-y-2">
+                <select
+                  value={assignedSalesUsername}
+                  onChange={e => {
+                    const uVal = e.target.value;
+                    setAssignedSalesUsername(uVal);
+                    const found = users.find(u => u.username === uVal);
+                    if (found) {
+                      setAssignedSalesName(found.name || found.username);
+                    }
+                  }}
+                  className="w-full p-3.5 clay-input font-bold text-sm cursor-pointer outline-none text-slate-900"
+                >
+                  <option value={currentUser.username}>
+                    Saya Sendiri ({currentUser.name || currentUser.username}) • Manager
+                  </option>
+                  {users.filter(u => u.username !== currentUser.username).map(u => (
+                    <option key={u.id || u.username} value={u.username}>
+                      {u.name || u.username} (@{u.username}) • {u.role.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+                <div className="flex items-center justify-between text-xs text-slate-600 px-1 pt-1">
+                  <span>Nama Display: <strong className="text-slate-900">{assignedSalesName}</strong></span>
+                  <span className="text-[10px] text-slate-500 font-mono">@{assignedSalesUsername}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-800 font-black flex items-center justify-center text-sm shrink-0">
+                  {(currentUser.name || currentUser.username).charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-xs font-black text-slate-900">{currentUser.name || currentUser.username}</p>
+                  <p className="text-[10px] text-slate-500 font-bold">Username: @{currentUser.username} • Sales Rep</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <p className="text-[10px] text-slate-500 mt-3 pt-2 border-t border-slate-200/60">
+            {isManager 
+              ? '👑 Manager dapat menetapkan atau mengubah sales PIC untuk penawaran ini.' 
+              : 'Dokumen ini akan otomatis tercatat atas nama akun sales Anda.'}
+          </p>
         </div>
       </div>
 

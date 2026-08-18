@@ -37,10 +37,11 @@ export function DashboardAnalytics({
   showToast
 }: DashboardAnalyticsProps) {
   const [entityFilter, setEntityFilter] = useState<string>('ALL');
+  const [salesFilter, setSalesFilter] = useState<string>('ALL');
   const [timeFilter, setTimeFilter] = useState<'ALL' | 'THIS_MONTH' | 'LAST_30'>('ALL');
 
   const entities = getSraGroupEntities(settings || defaultSettings);
-  const isManager = currentUser?.role === 'manager';
+  const isManager = currentUser?.role === 'manager' || currentUser?.role === 'admin';
 
   const safeQuotations = Array.isArray(quotations) ? quotations : [];
   const safeItems = Array.isArray(items) ? items : [];
@@ -50,6 +51,12 @@ export function DashboardAnalytics({
   const filteredQuotations = safeQuotations.filter(q => {
     if (!q) return false;
     if (!isManager && q.createdBy && currentUser?.username && q.createdBy !== currentUser.username) return false;
+    if (isManager && salesFilter !== 'ALL') {
+      const qCreated = (q.createdBy || '').toLowerCase();
+      const qSales = (q.salesName || '').toLowerCase();
+      const sTarget = salesFilter.toLowerCase();
+      if (qCreated !== sTarget && qSales !== sTarget) return false;
+    }
     if (entityFilter !== 'ALL' && q.issuingCompany !== entityFilter) return false;
     
     if (timeFilter !== 'ALL' && q.date) {
@@ -333,6 +340,25 @@ export function DashboardAnalytics({
               {pt.replace('PT ', '')}
             </button>
           ))}
+
+          {isManager && (
+            <div className="flex items-center gap-1.5 ml-0 sm:ml-2 pl-2 border-l border-slate-300">
+              <Users className="w-3.5 h-3.5 text-blue-700" />
+              <span className="text-xs font-bold text-slate-600">Sales PIC:</span>
+              <select
+                value={salesFilter}
+                onChange={e => setSalesFilter(e.target.value)}
+                className="p-1.5 clay-input font-bold text-xs bg-white text-slate-900 outline-none cursor-pointer"
+              >
+                <option value="ALL">Semua Tim Sales</option>
+                {users.filter(u => u.role === 'sales').map(u => (
+                  <option key={u.username} value={u.username}>
+                    {u.name || u.username} (@{u.username})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">

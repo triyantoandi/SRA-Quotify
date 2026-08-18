@@ -289,6 +289,8 @@ export default function App() {
         <CreateQuotation 
           items={items} 
           customers={customers} 
+          quotations={quotations}
+          users={users}
           settings={settings} 
           currentUser={currentUser} 
           initialData={editingQuote} 
@@ -370,7 +372,9 @@ export default function App() {
         />
       );
     }
-    if (activeTab === 'audit_logs' && currentUser.role === 'manager') {
+    const isManagerRole = currentUser.role === 'manager' || currentUser.role === 'admin';
+
+    if (activeTab === 'audit_logs' && isManagerRole) {
       return (
         <AuditLogsManagement 
           logs={activityLogs} 
@@ -380,7 +384,7 @@ export default function App() {
         />
       );
     }
-    if (activeTab === 'users' && currentUser.role === 'manager') {
+    if (activeTab === 'users' && isManagerRole) {
       return (
         <UsersManagement 
           users={users} 
@@ -392,7 +396,7 @@ export default function App() {
         />
       );
     }
-    if (activeTab === 'settings' && currentUser.role === 'manager') {
+    if (activeTab === 'settings' && isManagerRole) {
       return (
         <SettingsManagement 
           settings={settings} 
@@ -428,14 +432,16 @@ export default function App() {
     );
   };
 
+  const isManager = currentUser.role === 'manager' || currentUser.role === 'admin';
+
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
     { id: 'quotations', label: 'Quotations', icon: FileText, show: true },
     { id: 'customers', label: 'Pelanggan', icon: Users, show: true },
     { id: 'items', label: 'Pricelist', icon: Package, show: true },
-    { id: 'audit_logs', label: 'Audit Log', icon: Activity, show: currentUser.role === 'manager' },
-    { id: 'users', label: 'Users', icon: Shield, show: currentUser.role === 'manager' },
-    { id: 'settings', label: 'Setting', icon: SettingsIcon, show: currentUser.role === 'manager' }
+    { id: 'audit_logs', label: 'Audit Log', icon: Activity, show: isManager },
+    { id: 'users', label: 'Users', icon: Shield, show: isManager },
+    { id: 'settings', label: 'Setting', icon: SettingsIcon, show: isManager }
   ];
 
   return (

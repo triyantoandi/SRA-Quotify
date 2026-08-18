@@ -51,7 +51,7 @@ export function QuotationsList({
   const [dateFilter, setDateFilter] = useState<'ALL' | 'THIS_MONTH' | 'LAST_30'>('ALL');
   const [sortConfig, setSortConfig] = useState<{ key: keyof Quotation; direction: 'asc' | 'desc' }>({ key: 'date', direction: 'desc' });
 
-  const isManager = currentUser.role === 'manager';
+  const isManager = currentUser.role === 'manager' || currentUser.role === 'admin';
 
   // Extract comprehensive list of all registered sales users + anyone who created quotations
   const availableSalesReps = useMemo(() => {
@@ -213,7 +213,9 @@ export function QuotationsList({
           (q?.customerName || '').toLowerCase().includes(query) ||
           (q?.storeName && q.storeName.toLowerCase().includes(query)) ||
           (q?.customerEmail && q.customerEmail.toLowerCase().includes(query)) ||
-          (q?.attnName && q.attnName.toLowerCase().includes(query))
+          (q?.attnName && q.attnName.toLowerCase().includes(query)) ||
+          (q?.salesName && q.salesName.toLowerCase().includes(query)) ||
+          (q?.createdBy && q.createdBy.toLowerCase().includes(query))
         )
       );
     }
