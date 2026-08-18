@@ -1,0 +1,91 @@
+{
+  "schema": {
+    "collections": {
+      "items": {
+        "description": "Product catalog items",
+        "document": {
+          "fields": {
+            "id": { "type": "string", "description": "Item ID" },
+            "name": { "type": "string", "description": "Item name" },
+            "category": { "type": "string", "description": "Category name" },
+            "price": { "type": "number", "description": "Item unit price" },
+            "unit": { "type": "string", "description": "Unit of measure" },
+            "sku": { "type": "string", "description": "Stock keeping unit" }
+          }
+        }
+      },
+      "customers": {
+        "description": "Customer registry",
+        "document": {
+          "fields": {
+            "id": { "type": "string", "description": "Customer ID" },
+            "name": { "type": "string", "description": "Customer name" },
+            "phone": { "type": "string", "description": "Phone number" },
+            "email": { "type": "string", "description": "Email address" },
+            "address": { "type": "string", "description": "Customer address" },
+            "npwp": { "type": "string", "description": "Tax ID NPWP" }
+          }
+        }
+      },
+      "quotations": {
+        "description": "Sales quotations",
+        "document": {
+          "fields": {
+            "id": { "type": "string", "description": "Quotation ID" },
+            "customerId": { "type": "string", "description": "Customer ID" },
+            "customerName": { "type": "string", "description": "Customer name" },
+            "customerEmail": { "type": "string", "description": "Customer email" },
+            "attnName": { "type": "string", "description": "Attention contact name" },
+            "entity": { "type": "string", "description": "Company entity name" },
+            "date": { "type": "string", "description": "Quotation date" },
+            "subtotal": { "type": "number", "description": "Subtotal amount" },
+            "discountType": { "type": "string", "description": "Discount type" },
+            "discountAmount": { "type": "number", "description": "Discount rate or amount" },
+            "discountValue": { "type": "number", "description": "Calculated discount value" },
+            "taxRate": { "type": "number", "description": "Tax rate percentage" },
+            "taxValue": { "type": "number", "description": "Tax value" },
+            "total": { "type": "number", "description": "Total amount" },
+            "notes": { "type": "string", "description": "Notes or terms" },
+            "status": { "type": "string", "description": "Quotation status" },
+            "createdBy": { "type": "string", "description": "Creator user" }
+          }
+        }
+      },
+      "settings": {
+        "description": "Application settings",
+        "document": {
+          "fields": {
+            "id": { "type": "string", "description": "Setting key" }
+          }
+        }
+      },
+      "users": {
+        "description": "System users",
+        "document": {
+          "fields": {
+            "id": { "type": "string", "description": "User ID" },
+            "username": { "type": "string", "description": "Username" },
+            "name": { "type": "string", "description": "Full name" },
+            "role": { "type": "string", "description": "Role" }
+          }
+        }
+      },
+      "activityLogs": {
+        "description": "Audit activity logs",
+        "document": {
+          "fields": {
+            "id": { "type": "string", "description": "Log ID" },
+            "timestamp": { "type": "string", "description": "Timestamp" },
+            "username": { "type": "string", "description": "Username" },
+            "name": { "type": "string", "description": "Name" },
+            "action": { "type": "string", "description": "Action name" },
+            "details": { "type": "string", "description": "Action details" }
+          }
+        }
+      }
+    }
+  },
+  "securityRules": {
+    "rules": "rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if true;\n    }\n  }\n}"
+  }
+}
