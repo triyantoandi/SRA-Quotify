@@ -6,7 +6,7 @@ import {
 import { User, Item, Customer, Quotation, Settings, ActivityLog } from './types';
 import { 
   injectGlobalStyles, initialItems, initialCustomers, initialUsers, initialQuotations, defaultSettings,
-  isSupervisoryRole, normalizeRole
+  isSupervisoryRole, normalizeRole, checkDocumentOwnership
 } from './utils/helpers';
 import { 
   subscribeCollection, subscribeDoc, saveFirestoreDoc, deleteFirestoreDoc 
@@ -297,6 +297,10 @@ export default function App() {
             setEditingQuote(null);
           }}
           onViewQuotation={(q) => {
+            if (!isSupervisoryRole(currentUser?.role) && !checkDocumentOwnership(q, currentUser)) {
+              showToastMsg('Akses Ditolak: Anda hanya dapat melihat dokumen penawaran milik Anda sendiri.', 'error');
+              return;
+            }
             setQuoteViewFormat('QUOTATION');
             setViewingQuote(q);
           }}
@@ -345,24 +349,51 @@ export default function App() {
           currentUser={currentUser} 
           onNew={() => { setEditingQuote(null); setActiveTab('create_quotation'); }} 
           onView={(q) => {
+            if (!isSupervisoryRole(currentUser?.role) && !checkDocumentOwnership(q, currentUser)) {
+              showToastMsg('Akses Ditolak: Anda hanya dapat melihat dokumen penawaran milik Anda sendiri.', 'error');
+              return;
+            }
             setQuoteViewFormat('QUOTATION');
             setViewingQuote(q);
           }}
           onViewSO={(q) => {
+            if (!isSupervisoryRole(currentUser?.role) && !checkDocumentOwnership(q, currentUser)) {
+              showToastMsg('Akses Ditolak: Anda hanya dapat melihat Sales Order milik Anda sendiri.', 'error');
+              return;
+            }
             setQuoteViewFormat('SALES_ORDER');
             setViewingQuote(q);
           }}
-          onEdit={(q) => { setEditingQuote(q); setActiveTab('create_quotation'); }} 
+          onEdit={(q) => { 
+            if (!isSupervisoryRole(currentUser?.role) && !checkDocumentOwnership(q, currentUser)) {
+              showToastMsg('Akses Ditolak: Anda hanya dapat mengedit dokumen milik Anda sendiri.', 'error');
+              return;
+            }
+            setEditingQuote(q); 
+            setActiveTab('create_quotation'); 
+          }} 
           onDuplicate={(q) => { 
+            if (!isSupervisoryRole(currentUser?.role) && !checkDocumentOwnership(q, currentUser)) {
+              showToastMsg('Akses Ditolak: Anda hanya dapat menduplikat dokumen milik Anda sendiri.', 'error');
+              return;
+            }
             setEditingQuote({ ...q, id: '', status: 'Draft', date: new Date().toISOString().split('T')[0] }); 
             setActiveTab('create_quotation'); 
             showToastMsg("Diduplikat."); 
           }} 
-          onDelete={(id) => showConfirm("Hapus?", "Permanen.", () => { 
-            setQuotations(quotations.filter(q => q.id !== id)); 
-            showToastMsg("Dihapus"); 
-            logActivity('DEL_QUOTE', id); 
-          })} 
+          onDelete={(id) => {
+            const targetQuote = quotations.find(q => q.id === id);
+            if (targetQuote && !isSupervisoryRole(currentUser?.role) && !checkDocumentOwnership(targetQuote, currentUser)) {
+              showToastMsg('Akses Ditolak: Anda tidak memiliki izin menghapus penawaran sales lain.', 'error');
+              return;
+            }
+            showConfirm("Hapus Penawaran?", "Data penawaran akan dihapus secara permanen.", () => { 
+              setQuotations(quotations.filter(q => q.id !== id)); 
+              showToastMsg("Penawaran berhasil dihapus"); 
+              logActivity('DEL_QUOTE', id); 
+              syncToCloud('deleteQuotation', 'quotation', { id });
+            });
+          }} 
           showToast={showToastMsg} 
           logActivity={logActivity} 
           syncToCloud={syncToCloud} 

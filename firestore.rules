@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
+    // Helper functions for Role-Based Access Control (RBAC)
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -23,43 +23,37 @@ service cloud.firestore {
       );
     }
 
-    // Quotations Collection
+    // Quotations & Sales Orders Collection
     match /quotations/{quotationId} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if true;
     }
 
     // Product Catalog Items
     match /items/{itemId} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if true;
     }
 
-    // Customer Database
+    // Customer Database & Credit Limits
     match /customers/{customerId} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if true;
     }
 
-    // System Users
+    // System Users & Roles
     match /users/{userId} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if true;
     }
 
     // Settings
     match /settings/{settingId} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if true;
     }
 
-    // Audit Logs
+    // Activity Audit Logs
     match /activityLogs/{logId} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if true;
     }
 
-    // Catch-all
+    // Default Fallback
     match /{document=**} {
       allow read, write: if true;
     }
