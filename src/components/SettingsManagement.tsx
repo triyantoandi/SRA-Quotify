@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Building2, Wand2, Save } from 'lucide-react';
+import { Building2, Wand2, Save, Database, ShieldCheck } from 'lucide-react';
 import { Settings } from '../types';
 
 interface SettingsManagementProps {
@@ -35,7 +35,7 @@ export function SettingsManagement({ settings, setSettings, showToast, logActivi
 
   const handleSave = () => { 
     setSettings(formData); 
-    showToast("Pengaturan disimpan"); 
+    showToast("Pengaturan disimpan ke Firebase"); 
     logActivity('UPDATE_SETTINGS', 'Update config'); 
     syncToCloud?.('saveSettings', 'settings', formData);
   };
@@ -44,7 +44,7 @@ export function SettingsManagement({ settings, setSettings, showToast, logActivi
     <div className="max-w-4xl space-y-6 animate-in fade-in duration-300 relative z-10 font-sans">
       <div>
         <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Pengaturan Sistem</h2>
-        <p className="text-slate-500 text-sm font-semibold mt-0.5">Konfigurasi entitas perusahaan, standar dokumen quotation, dan integrasi</p>
+        <p className="text-slate-500 text-sm font-semibold mt-0.5">Konfigurasi entitas perusahaan, standar dokumen quotation, dan database Firebase</p>
       </div>
       
       <div className="clay-card p-6 overflow-hidden mb-6">
@@ -66,13 +66,30 @@ export function SettingsManagement({ settings, setSettings, showToast, logActivi
       <div className="clay-card p-6 overflow-hidden mb-6">
         <div className="pb-4 border-b border-slate-200/60 mb-5">
           <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
-            <Wand2 className="w-5 h-5 text-emerald-600"/> Dokumen Quotation & Integrasi
+            <Wand2 className="w-5 h-5 text-emerald-600"/> Dokumen Quotation & Database
           </h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="md:col-span-2 p-4 bg-[#eaf0f7] border border-slate-200/80 rounded-2xl">
-            <label className="block text-xs font-extrabold text-slate-800 mb-2">API URL Endpoint (Cloud Sync & Email Engine)</label>
-            <input type="text" value={formData?.apiUrl || ''} onChange={e => setFormData({...formData, apiUrl: e.target.value})} className="w-full p-3 clay-input font-mono text-xs font-extrabold text-blue-900" placeholder="https://api.sra-group.com"/>
+          <div className="md:col-span-2 p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                <Database className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                  Database: Firebase Firestore (Real-Time Cloud)
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                </h4>
+                <p className="text-[11px] text-slate-600 mt-0.5">
+                  Semua data tersimpan otomatis dan persisten di Firebase Firestore. Integrasi eksternal legacy telah dinonaktifkan untuk mencegah konflik database.
+                </p>
+              </div>
+            </div>
+            <div className="shrink-0 ml-3">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold bg-emerald-600 text-white">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span> ONLINE
+              </span>
+            </div>
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-2">Aksen Warna Tema PDF</label>

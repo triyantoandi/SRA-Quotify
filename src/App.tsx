@@ -73,7 +73,6 @@ export default function App() {
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() => {
     return safeJsonParse<ActivityLog[]>('sra_log', []);
   });
-  const [isSyncing, setIsSyncing] = useState(false);
   const [modalState, setModalState] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: (() => void) | null }>({
     isOpen: false, title: '', message: '', onConfirm: null
   });
@@ -112,7 +111,7 @@ export default function App() {
   }, []);
 
   const syncToCloud = async (action: string, payloadKey: string, payloadData: any) => {
-    // Firestore persistence
+    // Pure Firestore database persistence (no external API conflicts)
     try {
       if (action === 'saveQuotation' && payloadData?.id) {
         await saveFirestoreDoc('quotations', payloadData.id, payloadData);
@@ -136,18 +135,7 @@ export default function App() {
         await saveFirestoreDoc('settings', 'appSettings', payloadData);
       }
     } catch (e) {
-      console.error('Firestore sync error:', e);
-    }
-
-    if (!settings.apiUrl) return;
-    try { 
-      await fetch(settings.apiUrl, { 
-        method: "POST", 
-        headers: { "Content-Type": "text/plain;charset=utf-8" }, 
-        body: JSON.stringify({ action, [payloadKey]: payloadData }) 
-      }); 
-    } catch (e) {
-      console.error('Sync error:', e);
+      console.error('Firestore persistence error:', e);
     }
   };
 
@@ -175,24 +163,6 @@ export default function App() {
       isOpen: true, title, message: msg, 
       onConfirm: () => { onConfirm(); setModalState(p => ({ ...p, isOpen: false })); } 
     }); 
-  };
-
-  const handleFetchCloudData = async () => {
-    if (!settings.apiUrl) return showToastMsg("API URL kosong!", "error");
-    setIsSyncing(true);
-    try {
-      const res = await fetch(`${settings.apiUrl}?action=getData`); 
-      const data = await res.json();
-      if (data.quotations?.length) setQuotations(data.quotations); 
-      if (data.customers?.length) setCustomers(data.customers);
-      if (data.items?.length) setItems(data.items); 
-      if (data.users?.length) setUsers(data.users); 
-      if (data.logs?.length) setActivityLogs(data.logs);
-      showToastMsg("Sync sukses!");
-    } catch (err) { 
-      showToastMsg("Gagal sync cloud.", "error"); 
-    }
-    setIsSyncing(false);
   };
 
   if (!currentUser) {
@@ -517,13 +487,13 @@ export default function App() {
         </div>
 
         <div className="clay-card p-4 space-y-3">
-          <button 
-            onClick={handleFetchCloudData} 
-            disabled={isSyncing} 
-            className="w-full flex items-center justify-center gap-2 py-2.5 clay-button-secondary text-slate-700 text-xs font-extrabold"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-600' : 'text-blue-600'}`} /> Sync Cloud
-          </button>
+          <div className="flex items-center justify-between px-3 py-2 bg-emerald-50/90 text-emerald-900 rounded-xl border border-emerald-200/80 text-[11px] font-extrabold shadow-2xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Firestore Connected</span>
+            </div>
+            <span className="text-[9px] bg-emerald-200/70 text-emerald-800 px-1.5 py-0.5 rounded-md font-black">CLOUD</span>
+          </div>
           
           <div className="flex items-center gap-3 p-3 bg-[#e8f0f8] rounded-2xl border border-slate-200/80">
             <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white font-extrabold flex items-center justify-center text-xs shadow-xs">
