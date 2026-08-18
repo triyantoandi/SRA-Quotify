@@ -61,24 +61,59 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           </button>
         </form>
 
-        <div className="bg-[#eaf0f7] p-5 rounded-2xl border border-slate-200/60 text-center text-xs mt-1">
-          <p className="font-bold text-slate-500 uppercase tracking-wider text-[10px] mb-2.5">Akun Demo Sistem (Klik untuk Masuk Cepat):</p>
-          <div className="flex flex-col sm:flex-row justify-center gap-2.5">
+        <div className="bg-[#eaf0f7] p-5 rounded-2xl border border-slate-200/60 text-xs mt-1 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="font-bold text-slate-600 uppercase tracking-wider text-[10px]">Pilih Akun Demo (Klik untuk Masuk):</p>
+            <span className="text-[9px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full font-bold">Multi-Role</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => onLogin('admin', '123')}
-              className="clay-badge bg-white px-3.5 py-2 text-slate-700 font-medium hover:bg-blue-50 transition-colors text-left flex items-center justify-between cursor-pointer group"
+              className="clay-badge bg-white p-2.5 text-slate-700 font-medium hover:bg-blue-50 transition-all text-left flex flex-col cursor-pointer border border-blue-200 shadow-2xs"
             >
-              <span className="text-slate-500 text-[11px]">Manager:</span> 
-              <span className="font-mono text-blue-700 font-bold ml-2 group-hover:underline">admin / 123</span>
+              <div className="flex items-center justify-between w-full">
+                <span className="text-blue-900 font-black text-xs">Administrator / Manager</span>
+                <span className="font-mono text-blue-700 font-extrabold text-[11px] bg-blue-100/70 px-1.5 py-0.5 rounded">admin / 123</span>
+              </div>
+              <span className="text-[10px] text-slate-500 mt-1">Akses Global: Lihat & pantau penawaran semua sales secara real-time.</span>
             </button>
+
             <button
               type="button"
               onClick={() => onLogin('sales', '123')}
-              className="clay-badge bg-white px-3.5 py-2 text-slate-700 font-medium hover:bg-emerald-50 transition-colors text-left flex items-center justify-between cursor-pointer group"
+              className="clay-badge bg-white p-2.5 text-slate-700 font-medium hover:bg-emerald-50 transition-all text-left flex flex-col cursor-pointer border border-emerald-200 shadow-2xs"
             >
-              <span className="text-slate-500 text-[11px]">Sales:</span> 
-              <span className="font-mono text-emerald-700 font-bold ml-2 group-hover:underline">sales / 123</span>
+              <div className="flex items-center justify-between w-full">
+                <span className="text-emerald-900 font-black text-xs">Sales Rep (Siti Rahma)</span>
+                <span className="font-mono text-emerald-700 font-extrabold text-[11px] bg-emerald-100/70 px-1.5 py-0.5 rounded">sales / 123</span>
+              </div>
+              <span className="text-[10px] text-slate-500 mt-1">Akses Sales: Hanya melihat penawaran yang dibuat sendiri.</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onLogin('budi', '123')}
+              className="clay-badge bg-white p-2.5 text-slate-700 font-medium hover:bg-amber-50 transition-all text-left flex flex-col cursor-pointer border border-slate-200 shadow-2xs"
+            >
+              <div className="flex items-center justify-between w-full">
+                <span className="text-slate-900 font-black text-xs">Sales Rep (Budi Santoso)</span>
+                <span className="font-mono text-slate-700 font-extrabold text-[11px] bg-slate-100 px-1.5 py-0.5 rounded">budi / 123</span>
+              </div>
+              <span className="text-[10px] text-slate-500 mt-1">Akses Sales: Hanya melihat penawaran pribadi Budi.</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onLogin('hendra', '123')}
+              className="clay-badge bg-white p-2.5 text-slate-700 font-medium hover:bg-purple-50 transition-all text-left flex flex-col cursor-pointer border border-slate-200 shadow-2xs"
+            >
+              <div className="flex items-center justify-between w-full">
+                <span className="text-slate-900 font-black text-xs">Sales Rep (Hendra P.)</span>
+                <span className="font-mono text-slate-700 font-extrabold text-[11px] bg-slate-100 px-1.5 py-0.5 rounded">hendra / 123</span>
+              </div>
+              <span className="text-[10px] text-slate-500 mt-1">Akses Sales: Hanya melihat penawaran pribadi Hendra.</span>
             </button>
           </div>
         </div>
