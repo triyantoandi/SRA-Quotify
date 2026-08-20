@@ -43,6 +43,13 @@ export interface User {
 export interface QuotationItem {
   id?: number;
   itemId: string;
+  itemName?: string; // Custom Item Name (untuk barang non-price list / spot market)
+  itemSku?: string; // Custom SKU / Ref
+  itemUnit?: string; // Custom Unit (Kg, Dus, Pcs, Ton, Box, Karung, Pack, dll)
+  itemCategory?: string; // Kategori barang
+  itemDescription?: string; // Catatan spesifikasi khusus
+  isCustomItem?: boolean; // True jika barang khusus non-price list
+  costPrice?: number; // Estimasi HPP / Modal (opsional untuk kalkulasi profit internal)
   qty: number;
   unitPrice: number;
   subtotal: number;
@@ -76,8 +83,10 @@ export interface Quotation {
   storeName?: string;
   attnName?: string;
   customerEmail?: string;
+  customerPhone?: string; // Kontak Telepon / WhatsApp
   customerAddress?: string;
   customerNpwp?: string;
+  isCustomCustomer?: boolean; // True jika pelanggan baru / non-master ad-hoc
   items: QuotationItem[];
   subtotal: number;
   discountType?: 'nominal' | 'percentage' | string;

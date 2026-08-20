@@ -95,14 +95,19 @@ export function PrintableSalesOrder({
   const handleExportExcel = () => {
     const rows = safeQuoteItems.map((qi, idx) => {
       const itm = items.find(i => i.id === qi.itemId);
+      const itemName = qi.itemName || itm?.name || qi.itemId || 'Barang Spot';
+      const itemUnit = qi.itemUnit || itm?.unit || 'Dus';
       let keterangan = '';
       if (qi.itemDiscount && qi.itemDiscount > 0) {
         keterangan += `Disc: ${qi.itemDiscountType === 'percentage' ? `${qi.itemDiscount}%` : formatIDR(qi.itemDiscount)} `;
       }
+      if (qi.itemDescription) {
+        keterangan += `(${qi.itemDescription})`;
+      }
       return {
         'NO': idx + 1,
-        'BANYAKNYA': `${qi.qty} ${itm?.unit || 'Dus'}`,
-        'NAMA BARANG': itm?.name || qi.itemId || 'Barang',
+        'BANYAKNYA': `${qi.qty} ${itemUnit}`,
+        'NAMA BARANG': itemName,
         'HARGA': qi.unitPrice,
         'KETERANGAN': keterangan.trim() || '-'
       };
@@ -118,7 +123,9 @@ export function PrintableSalesOrder({
 
   const waText = `*SALES - ORDER (SO)*\n*${activeCompanyName}*\n\n*Nomor SO:* ${soNumber}\n*Tanggal:* ${formatDateDisplay(soDate)}\n*Nama Pembeli:* ${buyerName}\n*Alamat:* ${buyerAddress || '-'}\n*Telepon:* ${buyerPhone || '-'}\n\n*Daftar Barang:*\n${safeQuoteItems.map((qi, idx) => {
     const itm = items.find(i => i.id === qi.itemId);
-    return `${idx + 1}. ${itm?.name || 'Item'} (${qi.qty} ${itm?.unit || 'Dus'}) @ ${formatIDR(qi.unitPrice)}`;
+    const itemName = qi.itemName || itm?.name || 'Item';
+    const itemUnit = qi.itemUnit || itm?.unit || 'Dus';
+    return `${idx + 1}. ${itemName} (${qi.qty} ${itemUnit}) @ ${formatIDR(qi.unitPrice)}`;
   }).join('\n')}\n\n*Pembayaran:* ${paymentTerms}\n*Catatan:* ${soNotes || '-'}\n*Salesman:* ${salesmanName}\n\n_Dokumen Sales Order tercetak siap diproses._`;
 
   const handleShareWhatsApp = () => {
@@ -374,14 +381,24 @@ export function PrintableSalesOrder({
                       ket = qi.itemDiscountType === 'percentage' ? `Disc ${qi.itemDiscount}%` : `Disc ${formatIDR(qi.itemDiscount)}`;
                     }
 
+                    const itemName = qi.itemName || itemData?.name || qi.itemId || 'Barang Spot';
+                    const itemUnit = qi.itemUnit || itemData?.unit || 'Dus';
                     return (
                       <tr key={index} className="divide-x-2 divide-black h-8 md:h-9">
                         <td className="py-1.5 px-1 text-center font-bold">{index + 1}</td>
                         <td className="py-1.5 px-2 text-center font-bold">
-                          {qi.qty} {itemData?.unit || 'Dus'}
+                          {qi.qty} {itemUnit}
                         </td>
                         <td className="py-1.5 px-3 font-bold text-left">
-                          {itemData?.name || qi.itemId}
+                          <div className="flex items-center gap-1.5">
+                            <span>{itemName}</span>
+                            {qi.isCustomItem && (
+                              <span className="text-[7pt] bg-black/10 px-1 py-0.2 rounded font-black no-print">Spot</span>
+                            )}
+                          </div>
+                          {qi.itemDescription && (
+                            <span className="block text-[8pt] font-normal italic leading-tight text-slate-700">{qi.itemDescription}</span>
+                          )}
                         </td>
                         <td className="py-1.5 px-2 text-right font-bold tabular-nums">
                           {formatIDR(qi.unitPrice)}

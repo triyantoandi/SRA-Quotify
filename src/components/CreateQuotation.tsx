@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ChevronLeft, ChevronUp, ChevronDown, Building2, Users, Package, 
   PlusCircle, XCircle, Save, AlertCircle, AlertTriangle, ShieldCheck, 
-  ClipboardList, FileText, Calendar, DollarSign, Clock, Store, Check
+  ClipboardList, FileText, Calendar, DollarSign, Clock, Store, Check,
+  Sparkles, Tag, Phone, MapPin, Calculator, HelpCircle, ArrowRight
 } from 'lucide-react';
 import { Quotation, Item, Customer, Settings, User, QuotationItem } from '../types';
 import { 
@@ -17,12 +18,14 @@ interface CreateQuotationProps {
   customers: Customer[];
   quotations?: Quotation[];
   users?: User[];
-  onSave: (quote: Quotation) => void;
+  onSave: (quote: Quotation, newCustomerToSave?: Customer | null, newItemsToSave?: Item[]) => void;
   onCancel: () => void;
   initialData?: Quotation | null;
   settings: Settings;
   currentUser: User;
 }
+
+const COMMON_UNITS = ['Dus', 'Kg', 'Pcs', 'Ton', 'Box', 'Karung', 'Pack', 'Tray', 'Peti', 'Keranjang', 'Liter', 'Kaleng'];
 
 export function CreateQuotation({ 
   items, 
@@ -53,19 +56,47 @@ export function CreateQuotation({
   });
 
   const [issuingCompany, setIssuingCompany] = useState<string>(() => initialData?.issuingCompany || Object.keys(entities)[0]);
+  
+  // Customer selection mode: 'MASTER' (existing from database) vs 'CUSTOM' (ad-hoc / non-master)
+  const [customerMode, setCustomerMode] = useState<'MASTER' | 'CUSTOM'>(() => {
+    if (initialData?.isCustomCustomer) return 'CUSTOM';
+    if (initialData?.customerName && !customers.some(c => c.name === initialData.customerName)) return 'CUSTOM';
+    return 'MASTER';
+  });
+
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [saveCustomerToMaster, setSaveCustomerToMaster] = useState(false);
+  const [customCreditLimit, setCustomCreditLimit] = useState<number>(50000000);
+
   const [customer, setCustomer] = useState({ 
     name: '', 
     storeName: '', 
     attnName: '', 
+    phone: '',
     email: '', 
     address: '', 
     npwp: '' 
   });
   
-  const [quoteItems, setQuoteItems] = useState<QuotationItem[]>([
-    { id: Date.now(), itemId: '', qty: 1, unitPrice: 0, subtotal: 0, itemDiscount: 0, itemDiscountType: 'nominal' }
+  const [quoteItems, setQuoteItems] = useState<(QuotationItem & { saveToMasterCatalog?: boolean })[]>([
+    { 
+      id: Date.now(), 
+      itemId: '', 
+      isCustomItem: false,
+      itemName: '',
+      itemSku: '',
+      itemUnit: 'Dus',
+      itemCategory: 'General',
+      itemDescription: '',
+      costPrice: 0,
+      qty: 1, 
+      unitPrice: 0, 
+      subtotal: 0, 
+      itemDiscount: 0, 
+      itemDiscountType: 'nominal' 
+    }
   ]);
+
   const [discountType, setDiscountType] = useState<'nominal' | 'percentage' | string>('nominal'); 
   const [discountInput, setDiscountInput] = useState<number | string>(0);
   const [taxRate, setTaxRate] = useState<number | string>(0);
@@ -107,20 +138,59 @@ export function CreateQuotation({
     if (initialData) {
       if (initialData.issuingCompany) setIssuingCompany(initialData.issuingCompany);
       const foundCust = (customers || []).find(c => c && c.name === initialData.customerName);
-      if (foundCust) setSelectedCustomerId(foundCust.id);
+      if (foundCust) {
+        setSelectedCustomerId(foundCust.id);
+        setCustomerMode('MASTER');
+      } else {
+        setCustomerMode('CUSTOM');
+      }
+
       setCustomer({ 
         name: initialData.customerName || '', 
         storeName: initialData.storeName || foundCust?.storeName || '',
         attnName: initialData.attnName || '', 
+        phone: initialData.customerPhone || foundCust?.phone || '',
         email: initialData.customerEmail || '', 
         address: initialData.customerAddress || '', 
         npwp: initialData.customerNpwp || '' 
       });
+
       const initialItemsList = Array.isArray(initialData.items) ? initialData.items : [];
       setQuoteItems(
         initialItemsList.length > 0 
-          ? initialItemsList.map((i, idx) => ({ ...i, id: Date.now() + idx, itemDiscount: i?.itemDiscount || 0, itemDiscountType: i?.itemDiscountType || 'nominal' }))
-          : [{ id: Date.now(), itemId: '', qty: 1, unitPrice: 0, subtotal: 0, itemDiscount: 0, itemDiscountType: 'nominal' }]
+          ? initialItemsList.map((i, idx) => {
+              const matchedCatalogItem = (items || []).find(it => it.id === i.itemId);
+              const isCustom = i.isCustomItem ?? (!matchedCatalogItem || i.itemId.startsWith('SPOT-') || i.itemId.startsWith('CUSTOM-'));
+              return { 
+                ...i, 
+                id: Date.now() + idx, 
+                isCustomItem: isCustom,
+                itemName: i.itemName || matchedCatalogItem?.name || '',
+                itemSku: i.itemSku || matchedCatalogItem?.sku || '',
+                itemUnit: i.itemUnit || matchedCatalogItem?.unit || 'Dus',
+                itemCategory: i.itemCategory || matchedCatalogItem?.category || 'General',
+                itemDescription: i.itemDescription || matchedCatalogItem?.description || '',
+                costPrice: i.costPrice || 0,
+                itemDiscount: i?.itemDiscount || 0, 
+                itemDiscountType: i?.itemDiscountType || 'nominal' 
+              };
+            })
+          : [{ 
+              id: Date.now(), 
+              itemId: '', 
+              isCustomItem: false,
+              itemName: '',
+              itemSku: '',
+              itemUnit: 'Dus',
+              itemCategory: 'General',
+              itemDescription: '',
+              costPrice: 0,
+              qty: 1, 
+              unitPrice: 0, 
+              subtotal: 0, 
+              itemDiscount: 0, 
+              itemDiscountType: 'nominal' 
+            }]
       );
       setDiscountType(initialData.discountType || 'nominal'); 
       setDiscountInput(initialData.discountInput ?? initialData.discountValue ?? 0);
@@ -153,7 +223,7 @@ export function CreateQuotation({
       setDueDate(calculateDueDate(todayStr, 'Net 14 Hari'));
       setTaxRate(settings?.defaultTaxRate ?? 0);
     }
-  }, [initialData, customers, settings]);
+  }, [initialData, customers, settings, items]);
 
   // Recalculate Due Date whenever Order Date or Payment Term changes
   const handlePaymentTermChange = (newTerm: string) => {
@@ -177,13 +247,14 @@ export function CreateQuotation({
           name: selected.name, 
           storeName: selected.storeName || '', 
           attnName: selected.attnName || '', 
+          phone: selected.phone || '',
           email: selected.email || '', 
           address: selected.address || '', 
           npwp: selected.npwp || '' 
         }); 
       }
     } else { 
-      setCustomer({ name: '', storeName: '', attnName: '', email: '', address: '', npwp: '' }); 
+      setCustomer({ name: '', storeName: '', attnName: '', phone: '', email: '', address: '', npwp: '' }); 
     }
   };
 
@@ -194,18 +265,118 @@ export function CreateQuotation({
     return matchingTier ? matchingTier.price : (item.tiers[item.tiers.length-1]?.price || 0);
   };
 
-  const updateItem = (index: number, field: keyof QuotationItem, value: any) => {
+  const updateItem = (index: number, field: string, value: any) => {
     const newItems = [...quoteItems]; 
     const item = { ...newItems[index] }; 
     (item as any)[field] = value;
-    if (field === 'itemId' || field === 'qty') item.unitPrice = calculateTierPrice(item.itemId, Number(item.qty));
+    
+    // Auto calculate tier price only if it's a catalog item and itemId/qty changed
+    if (!item.isCustomItem && (field === 'itemId' || field === 'qty')) {
+      item.unitPrice = calculateTierPrice(item.itemId, Number(item.qty));
+      const catalogItem = items.find(i => i.id === item.itemId);
+      if (catalogItem) {
+        item.itemName = catalogItem.name;
+        item.itemSku = catalogItem.sku;
+        item.itemUnit = catalogItem.unit || 'Dus';
+        item.itemCategory = catalogItem.category || 'General';
+      }
+    }
+
     const currentQty = Number(item.qty) || 0; 
-    const grossTotal = item.unitPrice * currentQty;
-    let discountValue = item.itemDiscountType === 'percentage' ? (grossTotal * (Number(item.itemDiscount || 0) / 100)) : Number(item.itemDiscount || 0);
+    const grossTotal = Number(item.unitPrice || 0) * currentQty;
+    let discountValue = item.itemDiscountType === 'percentage' 
+      ? (grossTotal * (Number(item.itemDiscount || 0) / 100)) 
+      : Number(item.itemDiscount || 0);
+    
     item.subtotal = Math.max(0, grossTotal - discountValue);
     newItems[index] = item;
     setQuoteItems(newItems); 
     setError('');
+  };
+
+  // Add standard catalog item row
+  const addCatalogItem = () => {
+    setQuoteItems([
+      ...quoteItems, 
+      { 
+        id: Date.now(), 
+        itemId: '', 
+        isCustomItem: false,
+        itemName: '',
+        itemSku: '',
+        itemUnit: 'Dus',
+        itemCategory: 'General',
+        itemDescription: '',
+        costPrice: 0,
+        qty: 1, 
+        unitPrice: 0, 
+        subtotal: 0, 
+        itemDiscount: 0, 
+        itemDiscountType: 'nominal' 
+      }
+    ]);
+  };
+
+  // Add custom spot / non-price list item row
+  const addCustomItem = (customName?: string) => {
+    const spotId = `SPOT-${Date.now().toString().slice(-4)}`;
+    setQuoteItems([
+      ...quoteItems, 
+      { 
+        id: Date.now(), 
+        itemId: spotId, 
+        isCustomItem: true,
+        itemName: customName || '',
+        itemSku: `SPOT-${Math.floor(100 + Math.random() * 900)}`,
+        itemUnit: 'Dus',
+        itemCategory: 'Spot Item',
+        itemDescription: '',
+        costPrice: 0,
+        qty: 1, 
+        unitPrice: 0, 
+        subtotal: 0, 
+        itemDiscount: 0, 
+        itemDiscountType: 'nominal',
+        saveToMasterCatalog: false
+      }
+    ]);
+  };
+
+  // Switch a specific row between Catalog Item and Custom Spot Item
+  const toggleItemCustomMode = (index: number) => {
+    const newItems = [...quoteItems];
+    const cur = newItems[index];
+    const willBeCustom = !cur.isCustomItem;
+    
+    if (willBeCustom) {
+      newItems[index] = {
+        ...cur,
+        isCustomItem: true,
+        itemId: cur.itemId && cur.itemId.startsWith('SPOT-') ? cur.itemId : `SPOT-${Date.now().toString().slice(-4)}`,
+        itemName: cur.itemName || (items.find(i => i.id === cur.itemId)?.name || ''),
+        itemSku: cur.itemSku || (items.find(i => i.id === cur.itemId)?.sku || `SPOT-${Math.floor(100 + Math.random() * 900)}`),
+        itemUnit: cur.itemUnit || (items.find(i => i.id === cur.itemId)?.unit || 'Dus'),
+        unitPrice: cur.unitPrice || 0
+      };
+    } else {
+      newItems[index] = {
+        ...cur,
+        isCustomItem: false,
+        itemId: '',
+        unitPrice: 0
+      };
+    }
+    setQuoteItems(newItems);
+  };
+
+  // Apply Quick Profit Margin to a custom item
+  const applyMarginToItem = (index: number, marginPct: number) => {
+    const item = quoteItems[index];
+    const cost = Number(item.costPrice) || 0;
+    if (cost > 0) {
+      const calculatedPrice = Math.round(cost * (1 + marginPct / 100));
+      updateItem(index, 'unitPrice', calculatedPrice);
+    }
   };
 
   const moveQuoteItem = (index: number, direction: 'up' | 'down') => {
@@ -224,10 +395,11 @@ export function CreateQuotation({
 
   // Selected customer object & credit status
   const currentCustomerObj = useMemo(() => {
+    if (customerMode === 'CUSTOM') return null;
     if (selectedCustomerId) return customers.find(c => c.id === selectedCustomerId);
     if (customer.name) return customers.find(c => c.name.toLowerCase().trim() === customer.name.toLowerCase().trim());
     return null;
-  }, [selectedCustomerId, customer.name, customers]);
+  }, [customerMode, selectedCustomerId, customer.name, customers]);
 
   // Exclude current editing quotation from used credit calculation so it doesn't double count itself
   const filteredQuotationsForCredit = useMemo(() => {
@@ -236,12 +408,31 @@ export function CreateQuotation({
   }, [quotations, initialData]);
 
   const creditStatus = useMemo(() => {
+    if (customerMode === 'CUSTOM') {
+      return {
+        customerName: customer.name || 'Pelanggan Baru',
+        creditLimit: customCreditLimit,
+        usedCredit: 0,
+        remainingCredit: customCreditLimit,
+        usedPercentage: 0,
+        remainingPercentage: 100,
+        isExhausted: false,
+        isNearExhaustion: false,
+        warningThresholdPct: 10,
+        activeSoCount: 0,
+        activeOrders: [],
+        canMakeOrder: (amount: number) => ({
+          allowed: amount <= customCreditLimit,
+          deficit: Math.max(0, amount - customCreditLimit)
+        })
+      };
+    }
     return getCustomerCreditStatus(
       currentCustomerObj || customer.name, 
       customers, 
       filteredQuotationsForCredit
     );
-  }, [currentCustomerObj, customer.name, customers, filteredQuotationsForCredit]);
+  }, [customerMode, customCreditLimit, currentCustomerObj, customer.name, customers, filteredQuotationsForCredit]);
 
   // Validation logic for credit limit
   const orderCheck = useMemo(() => {
@@ -263,7 +454,19 @@ export function CreateQuotation({
     setWarningMsg('');
 
     if (!customer.name.trim()) return setError("Nama Perusahaan / Klien wajib diisi.");
-    if (quoteItems.length === 0 || quoteItems.some(i => !i.itemId)) return setError("Pastikan semua baris sudah terisi barang.");
+    if (quoteItems.length === 0) return setError("Rincian barang tidak boleh kosong.");
+
+    for (let idx = 0; idx < quoteItems.length; idx++) {
+      const qi = quoteItems[idx];
+      if (qi.isCustomItem) {
+        if (!qi.itemName?.trim()) return setError(`Baris #${idx + 1}: Nama Barang Custom wajib diisi.`);
+        if (qi.unitPrice <= 0) return setError(`Baris #${idx + 1}: Harga satuan barang custom harus lebih dari 0.`);
+      } else {
+        if (!qi.itemId) return setError(`Baris #${idx + 1}: Pilih barang dari katalog atau jadikan barang custom.`);
+        if (qi.unitPrice <= 0) return setError(`Baris #${idx + 1}: Harga satuan barang harus lebih dari 0.`);
+      }
+      if (qi.qty <= 0) return setError(`Baris #${idx + 1}: Jumlah (Qty) harus minimal 1.`);
+    }
 
     // ENFORCE CREDIT LIMIT FOR SALES ORDER
     if (docType === 'SALES_ORDER') {
@@ -276,7 +479,6 @@ export function CreateQuotation({
         if (!isAuthorized) {
           // If sales inputted manager PIN '123' or 'admin'
           if (managerPinInput === '123' || managerPinInput === 'admin' || managerPinInput === '8888') {
-            // Authorized via PIN
             setIsApprovedByManager(true);
           } else {
             return setError(
@@ -294,6 +496,27 @@ export function CreateQuotation({
     const finalSalesName = isManager ? (assignedSalesName || currentUser?.name || currentUser?.username || 'Sales Rep') : (initialData?.salesName || currentUser?.name || currentUser?.username || 'Sales Rep');
     const assignedUserObj = users.find(u => u.username === finalCreatedBy);
     const finalCreatedByRole = assignedUserObj?.role || initialData?.createdByRole || currentUser?.role || 'sales';
+
+    const cleanQuoteItems: QuotationItem[] = quoteItems.map((qi, idx) => {
+      const catalogItem = items.find(it => it.id === qi.itemId);
+      const isCustom = qi.isCustomItem || !catalogItem;
+      return {
+        id: qi.id || Date.now() + idx,
+        itemId: isCustom ? (qi.itemId || `SPOT-${idx + 1}`) : qi.itemId,
+        isCustomItem: isCustom,
+        itemName: isCustom ? (qi.itemName || 'Barang Spot') : (catalogItem?.name || qi.itemName || 'Item'),
+        itemSku: isCustom ? (qi.itemSku || `SPOT-${idx + 1}`) : (catalogItem?.sku || qi.itemSku || ''),
+        itemUnit: isCustom ? (qi.itemUnit || 'Dus') : (catalogItem?.unit || qi.itemUnit || 'Dus'),
+        itemCategory: isCustom ? (qi.itemCategory || 'Spot Market') : (catalogItem?.category || 'General'),
+        itemDescription: qi.itemDescription || catalogItem?.description || '',
+        costPrice: Number(qi.costPrice || 0),
+        qty: Number(qi.qty),
+        unitPrice: Number(qi.unitPrice),
+        subtotal: Number(qi.subtotal),
+        itemDiscount: Number(qi.itemDiscount || 0),
+        itemDiscountType: qi.itemDiscountType || 'nominal'
+      };
+    });
 
     const newQuote: Quotation = {
       id: initialData?.id || generateID(isSoMode ? 'SO' : (settings?.quotePrefix || 'QUO')),
@@ -316,20 +539,15 @@ export function CreateQuotation({
       status: isSoMode 
         ? (initialData?.status === 'Accepted' || initialData?.status === 'SO_Confirmed' ? initialData.status : 'SO_Confirmed') 
         : (initialData?.status || 'Draft'),
-      customerName: customer.name, 
-      storeName: customer.storeName, 
-      attnName: customer.attnName, 
-      customerEmail: customer.email, 
-      customerAddress: customer.address, 
-      customerNpwp: customer.npwp,
-      items: quoteItems.map(qi => ({ 
-        itemId: qi.itemId, 
-        qty: Number(qi.qty), 
-        unitPrice: qi.unitPrice, 
-        subtotal: qi.subtotal, 
-        itemDiscount: Number(qi.itemDiscount || 0), 
-        itemDiscountType: qi.itemDiscountType || 'nominal' 
-      })),
+      customerName: customer.name.trim(), 
+      storeName: customer.storeName?.trim() || undefined, 
+      attnName: customer.attnName?.trim() || undefined, 
+      customerPhone: customer.phone?.trim() || undefined,
+      customerEmail: customer.email?.trim() || undefined, 
+      customerAddress: customer.address?.trim() || undefined, 
+      customerNpwp: customer.npwp?.trim() || undefined,
+      isCustomCustomer: customerMode === 'CUSTOM',
+      items: cleanQuoteItems,
       subtotal: rawSubtotal, 
       discountType, 
       discountInput: Number(discountInput), 
@@ -354,13 +572,47 @@ export function CreateQuotation({
       managerApprovalNotes: managerApprovalNotes || undefined
     };
 
-    onSave(newQuote);
+    // Prepare new customer to save to master if requested
+    let newCustomerToSave: Customer | null = null;
+    if (customerMode === 'CUSTOM' && saveCustomerToMaster && customer.name.trim()) {
+      newCustomerToSave = {
+        id: generateID('CUST'),
+        name: customer.name.trim(),
+        storeName: customer.storeName?.trim() || undefined,
+        attnName: customer.attnName?.trim() || undefined,
+        phone: customer.phone?.trim() || '',
+        email: customer.email?.trim() || '',
+        address: customer.address?.trim() || '',
+        npwp: customer.npwp?.trim() || undefined,
+        creditLimit: customCreditLimit,
+        warningThresholdPct: 10,
+        creditNotes: 'Didaftarkan otomatis dari form penawaran harga'
+      };
+    }
+
+    // Prepare any custom items to save to master catalog if requested
+    const newItemsToSave: Item[] = [];
+    quoteItems.forEach((qi, idx) => {
+      if (qi.isCustomItem && qi.saveToMasterCatalog && qi.itemName?.trim()) {
+        newItemsToSave.push({
+          id: generateID('ITEM'),
+          sku: qi.itemSku?.trim() || `SRA-${Date.now().toString().slice(-4)}`,
+          name: qi.itemName.trim(),
+          category: qi.itemCategory?.trim() || 'Spot Item',
+          unit: qi.itemUnit?.trim() || 'Dus',
+          description: qi.itemDescription?.trim() || 'Item spot terdaftar otomatis',
+          tiers: [
+            { min: 1, max: 999999, price: Number(qi.unitPrice) }
+          ]
+        });
+      }
+    });
+
+    onSave(newQuote, newCustomerToSave, newItemsToSave);
   };
 
-  const activeEntityDetails = entities[issuingCompany] || Object.values(entities)[0];
-
   return (
-    <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-right-4 duration-300 relative z-10 font-sans pb-16">
+    <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-right-4 duration-300 relative z-10 font-sans pb-20">
       {/* Top Header Navigation */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
         <div className="flex items-center gap-4">
@@ -384,7 +636,7 @@ export function CreateQuotation({
             <p className="text-xs text-slate-500 font-semibold mt-0.5">
               {docType === 'SALES_ORDER' 
                 ? 'Pesanan pasti dari customer — memotong plafon kredit & menetapkan jatuh tempo.'
-                : 'Estimasi penawaran harga — belum memotong plafon kredit hingga dikonfirmasi SO.'}
+                : 'Estimasi penawaran harga fleksibel — mendukung pelanggan ad-hoc & barang spot non-price list.'}
             </p>
           </div>
         </div>
@@ -449,54 +701,39 @@ export function CreateQuotation({
           <select 
             value={issuingCompany} 
             onChange={e => setIssuingCompany(e.target.value)} 
-            className="w-full p-3.5 clay-input font-bold text-sm cursor-pointer outline-none"
+            className="w-full p-3.5 clay-input font-bold text-slate-900 text-sm"
           >
-            {Object.keys(entities).map(ptName => (
-              <option key={ptName} value={ptName} className="bg-white text-slate-900">{ptName}</option>
+            {Object.keys(entities).map(comp => (
+              <option key={comp} value={comp}>{comp}</option>
             ))}
           </select>
-          <div className="mt-4 pt-4 border-t border-slate-200/60 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-slate-600">
-            <div><span className="text-slate-500 font-medium">NPWP:</span> <span className="font-bold text-slate-900">{activeEntityDetails?.companyNpwp || '-'}</span></div>
-            <div><span className="text-slate-500 font-medium">Rekening:</span> <span className="font-mono font-bold text-slate-900">{activeEntityDetails?.bankDetails ? (activeEntityDetails.bankDetails.split('\n')[1] || activeEntityDetails.bankDetails.split('\n')[0]) : '-'}</span></div>
+          <div className="mt-3 p-3 bg-slate-50/80 rounded-xl border border-slate-200/80 text-[11px] space-y-1 text-slate-600 font-medium">
+            <p><strong>NPWP:</strong> {entities[issuingCompany]?.companyNpwp || '-'}</p>
+            <p className="truncate"><strong>Alamat:</strong> {entities[issuingCompany]?.companyAddress || '-'}</p>
           </div>
         </div>
 
-        {/* Sales PIC Assignment Card (Supervisi Manager) */}
-        <div className="clay-card p-6 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-blue-900 flex items-center gap-1.5">
-                <Users className="w-4 h-4 text-blue-700"/> Sales Rep PIC (Penanggung Jawab)
-              </h3>
-              {isManager ? (
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-200 text-amber-900 border border-amber-300">
-                  Manager Override
-                </span>
-              ) : (
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-200 text-slate-700">
-                  Sales PIC
-                </span>
-              )}
-            </div>
+        <div className="clay-card p-6">
+          <h3 className="text-xs font-extrabold uppercase tracking-wider text-emerald-800 mb-3 flex items-center gap-1.5">
+            <Users className="w-4 h-4 text-emerald-600"/> Sales PIC / Pembuat Dokumen
+          </h3>
 
+          <div className="space-y-3">
             {isManager ? (
               <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-700">Tugaskan ke PIC Sales:</label>
                 <select
                   value={assignedSalesUsername}
-                  onChange={e => {
-                    const uVal = e.target.value;
-                    setAssignedSalesUsername(uVal);
-                    const found = users.find(u => u.username === uVal);
-                    if (found) {
-                      setAssignedSalesName(found.name || found.username);
+                  onChange={(e) => {
+                    const selectedU = users.find(u => u.username === e.target.value);
+                    setAssignedSalesUsername(e.target.value);
+                    if (selectedU) {
+                      setAssignedSalesName(selectedU.name || selectedU.username);
                     }
                   }}
-                  className="w-full p-3.5 clay-input font-bold text-sm cursor-pointer outline-none text-slate-900"
+                  className="w-full p-3.5 clay-input font-bold text-slate-900 text-sm cursor-pointer"
                 >
-                  <option value={currentUser.username}>
-                    Saya Sendiri ({currentUser.name || currentUser.username}) • Manager
-                  </option>
-                  {users.filter(u => u.username !== currentUser.username).map(u => (
+                  {users.map((u) => (
                     <option key={u.id || u.username} value={u.username}>
                       {u.name || u.username} (@{u.username}) • {u.role.toUpperCase()}
                     </option>
@@ -530,31 +767,103 @@ export function CreateQuotation({
 
       {/* Data Klien & Real-time Credit Limit Widget */}
       <div className="clay-card p-6 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-3">
-          <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
-            <Users className="w-4 h-4 text-emerald-600"/> Data Pelanggan / Klien
-          </h3>
-          <span className="text-[11px] font-bold text-slate-500">
-            {currentCustomerObj ? `ID: ${currentCustomerObj.id}` : 'Customer Baru / Manual'}
-          </span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/60 pb-3">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-emerald-600"/>
+            <h3 className="text-sm font-extrabold text-slate-900">Data Pelanggan / Klien</h3>
+          </div>
+
+          {/* Mode Pelanggan Toggle: Master vs Custom */}
+          <div className="p-1 bg-[#e0e8f2] rounded-xl border border-slate-300 flex text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => {
+                setCustomerMode('MASTER');
+                setError('');
+              }}
+              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                customerMode === 'MASTER'
+                  ? 'bg-white text-slate-900 font-black shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5 text-blue-600" />
+              Pilih dari Master ({customers.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCustomerMode('CUSTOM');
+                setSelectedCustomerId('');
+                setError('');
+              }}
+              className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                customerMode === 'CUSTOM'
+                  ? 'bg-purple-600 text-white font-black shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Pelanggan Baru / Custom
+            </button>
+          </div>
         </div>
 
-        {/* Master Customer Selection */}
-        <div className="p-4 bg-[#eaf0f7] rounded-2xl border border-slate-200/60">
-          <label className="block text-xs font-bold text-slate-700 mb-2">Pilih dari Master Pelanggan</label>
-          <select 
-            value={selectedCustomerId} 
-            onChange={e => handleCustomerSelect(e.target.value)} 
-            className="w-full p-3.5 clay-input font-bold text-slate-900 text-sm outline-none"
-          >
-            <option value="" className="text-slate-400">-- Input Manual Pelanggan --</option>
-            {customers.map(c => (
-              <option key={c.id} value={c.id}>
-                {c.name}{c.storeName ? ` (${c.storeName})` : ''} • Plafon: {formatIDR(c.creditLimit ?? 50000000)}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* MASTER CUSTOMER SELECTION */}
+        {customerMode === 'MASTER' ? (
+          <div className="p-4 bg-[#eaf0f7] rounded-2xl border border-slate-200/60 space-y-2">
+            <div className="flex justify-between items-center">
+              <label className="block text-xs font-bold text-slate-700">Pilih dari Master Pelanggan Terdaftar</label>
+              <button
+                type="button"
+                onClick={() => setCustomerMode('CUSTOM')}
+                className="text-[11px] font-black text-purple-700 hover:underline flex items-center gap-1"
+              >
+                + Pelanggan Tidak Ada di List? Klik Di Sini
+              </button>
+            </div>
+            <select 
+              value={selectedCustomerId} 
+              onChange={e => handleCustomerSelect(e.target.value)} 
+              className="w-full p-3.5 clay-input font-bold text-slate-900 text-sm outline-none cursor-pointer"
+            >
+              <option value="" className="text-slate-400">-- Pilih Pelanggan Dari Database --</option>
+              {customers.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name}{c.storeName ? ` (${c.storeName})` : ''} • Plafon: {formatIDR(c.creditLimit ?? 50000000)}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          /* CUSTOM AD-HOC CUSTOMER BANNER */
+          <div className="p-4 bg-purple-50 rounded-2xl border border-purple-200 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-purple-100 text-purple-700">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-purple-950">Mode Pelanggan Custom / Spot</h4>
+                  <p className="text-[10px] text-purple-800 font-semibold">
+                    Fleksibel untuk penawaran customer ad-hoc, toko baru, atau kontak perorangan tanpa harus membuat master terlebih dahulu.
+                  </p>
+                </div>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 rounded-xl border border-purple-200 shadow-xs shrink-0">
+                <input 
+                  type="checkbox" 
+                  checked={saveCustomerToMaster} 
+                  onChange={e => setSaveCustomerToMaster(e.target.checked)} 
+                  className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                />
+                <span className="text-xs font-black text-purple-950">
+                  Simpan juga ke Master Database
+                </span>
+              </label>
+            </div>
+          </div>
+        )}
 
         {/* Real-time Customer Credit Status Widget */}
         {customer.name.trim() && (
@@ -566,7 +875,12 @@ export function CreateQuotation({
                 </div>
                 <div>
                   <h4 className="text-xs font-black text-slate-900">
-                    Status Plafon Kredit: <span className="text-indigo-900">{customer.name}</span>
+                    Status Plafon Transaksi: <span className="text-indigo-900">{customer.name}</span>
+                    {customerMode === 'CUSTOM' && (
+                      <span className="ml-2 px-2 py-0.5 bg-purple-100 text-purple-800 text-[10px] rounded-full font-black">
+                        Custom Customer
+                      </span>
+                    )}
                   </h4>
                   <p className="text-[10px] text-slate-500 font-bold">
                     {creditStatus.activeSoCount} Transaksi SO Aktif Belum Lunas
@@ -594,7 +908,7 @@ export function CreateQuotation({
             {/* Credit Numbers Breakdown */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
               <div>
-                <p className="text-[10px] uppercase font-black text-slate-500">Plafon Disepakati</p>
+                <p className="text-[10px] uppercase font-black text-slate-500">Plafon Transaksi</p>
                 <p className="text-sm font-black text-slate-900 tabular-nums">{formatIDR(creditStatus.creditLimit)}</p>
               </div>
               <div>
@@ -631,36 +945,50 @@ export function CreateQuotation({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">Kepada (PT / Perusahaan) *</label>
+            <label className="block text-xs font-bold text-slate-700 mb-2">
+              Kepada (PT / Perusahaan / Nama Customer) *
+            </label>
             <input 
               type="text" 
               value={customer.name} 
               onChange={e => { setCustomer({...customer, name: e.target.value}); setError(''); }} 
               className="w-full p-3.5 clay-input text-sm font-semibold" 
-              placeholder="PT Maju Bersama"
+              placeholder="PT Maju Bersama / CV Berkah Jaya / Toko Buah Segar"
             />
           </div>
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
               <Store className="w-3.5 h-3.5 text-emerald-600" />
-              Nama Toko / Supermarket / Outlet
+              Nama Toko / Supermarket / Outlet (Opsional)
             </label>
             <input 
               type="text" 
               value={customer.storeName || ''} 
               onChange={e => setCustomer({...customer, storeName: e.target.value})} 
               className="w-full p-3.5 clay-input text-sm font-semibold" 
-              placeholder="Superindo Duren Sawit / Hypermart Puri"
+              placeholder="Superindo Duren Sawit / Pasar Induk Kramat Jati"
             />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-2">Up : (Nama Customer / Kontak)</label>
+            <label className="block text-xs font-bold text-slate-700 mb-2">Up : (Nama Kontak / Purchasing)</label>
             <input 
               type="text" 
               value={customer.attnName || ''} 
               onChange={e => setCustomer({...customer, attnName: e.target.value})} 
               className="w-full p-3.5 clay-input text-sm font-semibold" 
-              placeholder="Bp. Andi / Purchasing Head"
+              placeholder="Bp. Andi / Ibu Maya"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1">
+              <Phone className="w-3.5 h-3.5 text-emerald-600" /> No. Telepon / WhatsApp
+            </label>
+            <input 
+              type="text" 
+              value={customer.phone || ''} 
+              onChange={e => setCustomer({...customer, phone: e.target.value})} 
+              className="w-full p-3.5 clay-input text-sm font-semibold" 
+              placeholder="0812-3456-7890"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -685,8 +1013,24 @@ export function CreateQuotation({
               />
             </div>
           </div>
+          {customerMode === 'CUSTOM' && (
+            <div>
+              <label className="block text-xs font-bold text-purple-900 mb-2">
+                Plafon Kredit Transaksi (IDR)
+              </label>
+              <input 
+                type="number" 
+                value={customCreditLimit} 
+                onChange={e => setCustomCreditLimit(Number(e.target.value) || 0)} 
+                className="w-full p-3.5 clay-input text-sm font-bold text-purple-950" 
+                placeholder="50000000"
+              />
+            </div>
+          )}
           <div className="md:col-span-2">
-            <label className="block text-xs font-bold text-slate-700 mb-2">Alamat Lengkap Pengiriman / Kantor</label>
+            <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-emerald-600" /> Alamat Lengkap Pengiriman / Kantor
+            </label>
             <textarea 
               value={customer.address} 
               onChange={e => setCustomer({...customer, address: e.target.value})} 
@@ -878,55 +1222,361 @@ export function CreateQuotation({
 
       {/* Rincian Barang & Produk */}
       <div className="clay-card p-6">
-        <h3 className="text-sm font-extrabold text-slate-900 mb-5 border-b border-slate-200/60 pb-2.5 flex items-center gap-2">
-          <Package className="w-4 h-4 text-emerald-600"/> Rincian Barang / Produk
-        </h3>
-        <div className="space-y-3.5">
-          {quoteItems.map((qi, index) => (
-            <div key={qi.id || index} className="flex flex-wrap md:flex-nowrap gap-3 items-center bg-[#eaf0f7] p-4 rounded-2xl border border-slate-200/70 relative group">
-              <div className="flex flex-col gap-1 pr-2 border-r border-slate-300/60">
-                <button onClick={() => moveQuoteItem(index, 'up')} disabled={index === 0} className="p-1 text-slate-500 hover:text-slate-900 disabled:opacity-20"><ChevronUp className="w-4 h-4"/></button>
-                <button onClick={() => moveQuoteItem(index, 'down')} disabled={index === quoteItems.length - 1} className="p-1 text-slate-500 hover:text-slate-900 disabled:opacity-20"><ChevronDown className="w-4 h-4"/></button>
-              </div>
-              <div className="flex-1 min-w-[200px]">
-                <label className="block text-[9px] font-extrabold text-slate-600 mb-1 uppercase tracking-wider">Barang</label>
-                <ItemSelect items={items} value={qi.itemId} onChange={(val) => updateItem(index, 'itemId', val)} />
-              </div>
-              <div className="w-20">
-                <label className="block text-[9px] font-extrabold text-slate-600 mb-1 uppercase tracking-wider">Qty</label>
-                <input type="number" min="1" value={qi.qty} onChange={e => updateItem(index, 'qty', e.target.value)} className="w-full p-3 clay-input text-center font-extrabold text-sm tabular-nums"/>
-              </div>
-              <div className="w-32">
-                <label className="block text-[9px] font-extrabold text-slate-600 mb-1 uppercase tracking-wider">Harga Tier</label>
-                <div className="p-3 clay-badge bg-white text-slate-800 font-extrabold text-right text-sm tabular-nums truncate">{formatIDR(qi.unitPrice)}</div>
-              </div>
-              <div className="w-36">
-                 <label className="block text-[9px] font-extrabold text-slate-600 mb-1 uppercase tracking-wider">Diskon Item</label>
-                 <div className="flex gap-1.5">
-                  <select value={qi.itemDiscountType} onChange={e => {updateItem(index, 'itemDiscountType', e.target.value); updateItem(index, 'itemDiscount', 0);}} className="w-12 p-2.5 clay-input text-center font-bold text-xs appearance-none">
-                    <option value="nominal">Rp</option>
-                    <option value="percentage">%</option>
-                  </select>
-                  <input type="number" min="0" value={qi.itemDiscount || ''} onChange={e => updateItem(index, 'itemDiscount', e.target.value)} placeholder="0" className="w-full p-2.5 clay-input text-right font-bold text-sm tabular-nums"/>
-                 </div>
-              </div>
-              <div className="w-36">
-                <label className="block text-[9px] font-extrabold text-slate-600 mb-1 uppercase tracking-wider">Subtotal</label>
-                <div className="p-3 clay-badge bg-emerald-50 text-emerald-900 border-emerald-300 font-extrabold text-right text-sm tabular-nums truncate">{formatIDR(qi.subtotal)}</div>
-              </div>
-              {quoteItems.length > 1 && (
-                <button onClick={() => setQuoteItems(quoteItems.filter((_, i) => i !== index))} className="absolute -right-2 -top-2 clay-button-secondary text-rose-600 p-1.5 rounded-full opacity-90 md:opacity-0 group-hover:opacity-100">
-                  <XCircle className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          ))}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/60 pb-3 mb-5">
+          <div className="flex items-center gap-2">
+            <Package className="w-4 h-4 text-emerald-600"/>
+            <h3 className="text-sm font-extrabold text-slate-900">Rincian Barang / Produk Penawaran</h3>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button 
+              type="button"
+              onClick={addCatalogItem} 
+              className="px-3.5 py-2 clay-button-secondary text-blue-800 font-bold text-xs flex items-center gap-1.5"
+            >
+              <Package className="w-3.5 h-3.5" /> + Dari Katalog
+            </button>
+            <button 
+              type="button"
+              onClick={() => addCustomItem()} 
+              className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-black text-xs flex items-center gap-1.5 shadow-sm transition-all"
+            >
+              <Sparkles className="w-3.5 h-3.5" /> + Barang Spot / Non-Price List
+            </button>
+          </div>
         </div>
 
-        <button onClick={() => setQuoteItems([...quoteItems, { id: Date.now(), itemId: '', qty: 1, unitPrice: 0, subtotal: 0, itemDiscount: 0, itemDiscountType: 'nominal' }])} className="mt-5 flex items-center gap-2 px-5 py-3 clay-button-secondary text-blue-700 font-bold text-xs">
-          <PlusCircle className="w-4 h-4" /> Tambah Baris Barang
-        </button>
+        <div className="space-y-4">
+          {quoteItems.map((qi, index) => {
+            const isCustom = qi.isCustomItem;
+            const cost = Number(qi.costPrice) || 0;
+            const price = Number(qi.unitPrice) || 0;
+            const marginAmount = price - cost;
+            const marginPct = cost > 0 ? Math.round((marginAmount / cost) * 100) : 0;
 
+            return (
+              <div 
+                key={qi.id || index} 
+                className={`p-4 rounded-2xl border transition-all relative group ${
+                  isCustom 
+                    ? 'bg-purple-50/70 border-purple-200 shadow-xs' 
+                    : 'bg-[#eaf0f7] border-slate-200/70'
+                }`}
+              >
+                {/* Header bar per row */}
+                <div className="flex items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-300/40">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-slate-500">#{index + 1}</span>
+                    {isCustom ? (
+                      <span className="px-2 py-0.5 rounded-md bg-purple-200 text-purple-900 font-black text-[10px] uppercase tracking-wider flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" /> Barang Spot / Non-Price List
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-900 font-black text-[10px] uppercase tracking-wider flex items-center gap-1">
+                        <Tag className="w-3 h-3" /> Katalog Price List
+                      </span>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => toggleItemCustomMode(index)}
+                      className="text-[10px] font-bold text-slate-600 hover:text-slate-900 underline ml-2"
+                    >
+                      {isCustom ? 'Ganti ke Katalog' : 'Ubah ke Custom / Spot Price'}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button 
+                      onClick={() => moveQuoteItem(index, 'up')} 
+                      disabled={index === 0} 
+                      className="p-1 text-slate-500 hover:text-slate-900 disabled:opacity-20"
+                      title="Geser ke atas"
+                    >
+                      <ChevronUp className="w-4 h-4"/>
+                    </button>
+                    <button 
+                      onClick={() => moveQuoteItem(index, 'down')} 
+                      disabled={index === quoteItems.length - 1} 
+                      className="p-1 text-slate-500 hover:text-slate-900 disabled:opacity-20"
+                      title="Geser ke bawah"
+                    >
+                      <ChevronDown className="w-4 h-4"/>
+                    </button>
+                    {quoteItems.length > 1 && (
+                      <button 
+                        onClick={() => setQuoteItems(quoteItems.filter((_, i) => i !== index))} 
+                        className="p-1 text-rose-600 hover:text-rose-800 ml-1"
+                        title="Hapus baris"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* ITEM FIELDS */}
+                {isCustom ? (
+                  /* CUSTOM SPOT ITEM FIELDS */
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                      <div className="md:col-span-5">
+                        <label className="block text-[10px] font-black text-purple-950 mb-1 uppercase tracking-wider">
+                          Nama Barang Khusus / Non-Price List *
+                        </label>
+                        <input 
+                          type="text" 
+                          value={qi.itemName || ''} 
+                          onChange={e => updateItem(index, 'itemName', e.target.value)} 
+                          placeholder="Contoh: Wortel Berastagi Super Jumbo / Jeruk Shantang Daun"
+                          className="w-full p-2.5 clay-input text-sm font-extrabold text-slate-900"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] font-black text-slate-700 mb-1 uppercase tracking-wider">
+                          Satuan
+                        </label>
+                        <div className="flex gap-1">
+                          <input 
+                            type="text" 
+                            value={qi.itemUnit || 'Dus'} 
+                            onChange={e => updateItem(index, 'itemUnit', e.target.value)} 
+                            list={`units-list-${index}`}
+                            className="w-full p-2.5 clay-input text-center text-sm font-bold"
+                            placeholder="Dus"
+                          />
+                          <datalist id={`units-list-${index}`}>
+                            {COMMON_UNITS.map(u => <option key={u} value={u} />)}
+                          </datalist>
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] font-black text-slate-700 mb-1 uppercase tracking-wider">
+                          Qty
+                        </label>
+                        <input 
+                          type="number" 
+                          min="1" 
+                          value={qi.qty} 
+                          onChange={e => updateItem(index, 'qty', e.target.value)} 
+                          className="w-full p-2.5 clay-input text-center font-black text-sm tabular-nums"
+                        />
+                      </div>
+
+                      <div className="md:col-span-3">
+                        <label className="block text-[10px] font-black text-purple-950 mb-1 uppercase tracking-wider">
+                          Harga Satuan Negosiasi (Rp) *
+                        </label>
+                        <input 
+                          type="number" 
+                          min="0" 
+                          value={qi.unitPrice || ''} 
+                          onChange={e => updateItem(index, 'unitPrice', e.target.value)} 
+                          placeholder="0"
+                          className="w-full p-2.5 clay-input text-right font-black text-sm text-purple-950 tabular-nums"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Secondary Custom Specs, Cost & Margin */}
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center bg-white/80 p-2.5 rounded-xl border border-purple-200/80 text-xs">
+                      <div className="md:col-span-4">
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase">
+                          Catatan / Spesifikasi Barang
+                        </label>
+                        <input 
+                          type="text" 
+                          value={qi.itemDescription || ''} 
+                          onChange={e => updateItem(index, 'itemDescription', e.target.value)} 
+                          placeholder="Misal: Kemasan Polos @ 10kg, Grade A Asal Mesir"
+                          className="w-full p-1.5 clay-input text-xs font-medium"
+                        />
+                      </div>
+
+                      <div className="md:col-span-3">
+                        <label className="block text-[9px] font-bold text-slate-500 uppercase">
+                          Harga Modal / HPP (Opsional)
+                        </label>
+                        <input 
+                          type="number" 
+                          min="0" 
+                          value={qi.costPrice || ''} 
+                          onChange={e => updateItem(index, 'costPrice', e.target.value)} 
+                          placeholder="0"
+                          className="w-full p-1.5 clay-input text-right font-bold text-xs tabular-nums"
+                        />
+                      </div>
+
+                      <div className="md:col-span-3 flex items-center gap-1.5">
+                        {cost > 0 && price > 0 ? (
+                          <div className="flex flex-col">
+                            <span className="text-[9px] font-bold text-slate-500 uppercase">Margin Profit</span>
+                            <span className={`font-black text-xs ${marginPct >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                              {marginPct >= 0 ? `+${marginPct}%` : `${marginPct}%`} ({formatIDR(marginAmount)}/u)
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9px] text-slate-400 font-bold">Quick Margin:</span>
+                            {[15, 20, 25].map(pct => (
+                              <button
+                                key={pct}
+                                type="button"
+                                onClick={() => applyMarginToItem(index, pct)}
+                                disabled={cost <= 0}
+                                className="px-1.5 py-0.5 bg-purple-100 text-purple-900 rounded font-black text-[10px] hover:bg-purple-200 disabled:opacity-30"
+                              >
+                                +{pct}%
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="md:col-span-2 text-right">
+                        <label className="flex items-center justify-end gap-1 text-[10px] font-bold text-purple-950 cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            checked={qi.saveToMasterCatalog || false} 
+                            onChange={e => updateItem(index, 'saveToMasterCatalog', e.target.checked)} 
+                            className="w-3.5 h-3.5 text-purple-600 rounded"
+                          />
+                          <span>+ Simpan ke Katalog</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Diskon & Subtotal Baris */}
+                    <div className="flex flex-wrap md:flex-nowrap justify-between items-center gap-3 pt-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">Diskon Baris:</span>
+                        <div className="flex gap-1 w-36">
+                          <select 
+                            value={qi.itemDiscountType} 
+                            onChange={e => { updateItem(index, 'itemDiscountType', e.target.value); updateItem(index, 'itemDiscount', 0); }} 
+                            className="w-12 p-1.5 clay-input text-center font-bold text-xs appearance-none"
+                          >
+                            <option value="nominal">Rp</option>
+                            <option value="percentage">%</option>
+                          </select>
+                          <input 
+                            type="number" 
+                            min="0" 
+                            value={qi.itemDiscount || ''} 
+                            onChange={e => updateItem(index, 'itemDiscount', e.target.value)} 
+                            placeholder="0" 
+                            className="w-full p-1.5 clay-input text-right font-bold text-xs tabular-nums"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-600">Subtotal:</span>
+                        <span className="px-3 py-1.5 rounded-xl bg-purple-100 text-purple-950 border border-purple-300 font-black text-sm tabular-nums">
+                          {formatIDR(qi.subtotal)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* CATALOG PRICE LIST ITEM FIELDS */
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                    <div className="md:col-span-5">
+                      <label className="block text-[9px] font-extrabold text-slate-600 mb-1 uppercase tracking-wider">
+                        Pilih Barang dari Katalog
+                      </label>
+                      <ItemSelect 
+                        items={items} 
+                        value={qi.itemId} 
+                        onChange={(val) => updateItem(index, 'itemId', val)} 
+                        onSelectCustomName={(customName) => {
+                          updateItem(index, 'isCustomItem', true);
+                          updateItem(index, 'itemName', customName);
+                          updateItem(index, 'itemId', `SPOT-${Date.now().toString().slice(-4)}`);
+                        }}
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-[9px] font-extrabold text-slate-600 mb-1 uppercase tracking-wider">
+                        Qty
+                      </label>
+                      <input 
+                        type="number" 
+                        min="1" 
+                        value={qi.qty} 
+                        onChange={e => updateItem(index, 'qty', e.target.value)} 
+                        className="w-full p-3 clay-input text-center font-extrabold text-sm tabular-nums"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-[9px] font-extrabold text-slate-600 mb-1 uppercase tracking-wider">
+                        Harga Tier
+                      </label>
+                      <div className="p-3 clay-badge bg-white text-slate-800 font-extrabold text-right text-sm tabular-nums truncate">
+                        {formatIDR(qi.unitPrice)}
+                      </div>
+                    </div>
+
+                    <div className="md:col-span-3">
+                      <label className="block text-[9px] font-extrabold text-slate-600 mb-1 uppercase tracking-wider">
+                        Diskon Item
+                      </label>
+                      <div className="flex gap-1.5">
+                        <select 
+                          value={qi.itemDiscountType} 
+                          onChange={e => { updateItem(index, 'itemDiscountType', e.target.value); updateItem(index, 'itemDiscount', 0); }} 
+                          className="w-12 p-2.5 clay-input text-center font-bold text-xs appearance-none"
+                        >
+                          <option value="nominal">Rp</option>
+                          <option value="percentage">%</option>
+                        </select>
+                        <input 
+                          type="number" 
+                          min="0" 
+                          value={qi.itemDiscount || ''} 
+                          onChange={e => updateItem(index, 'itemDiscount', e.target.value)} 
+                          placeholder="0" 
+                          className="w-full p-2.5 clay-input text-right font-bold text-sm tabular-nums"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="md:col-span-12 flex justify-end items-center gap-2 pt-1 border-t border-slate-200/60">
+                      <span className="text-xs font-bold text-slate-600">Subtotal:</span>
+                      <span className="px-3 py-1 rounded-xl bg-emerald-50 text-emerald-900 border border-emerald-300 font-extrabold text-sm tabular-nums">
+                        {formatIDR(qi.subtotal)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Add Row Buttons */}
+        <div className="mt-5 flex flex-wrap gap-2.5">
+          <button 
+            type="button"
+            onClick={addCatalogItem} 
+            className="flex items-center gap-2 px-5 py-3 clay-button-secondary text-blue-700 font-bold text-xs"
+          >
+            <PlusCircle className="w-4 h-4" /> Tambah Barang dari Katalog
+          </button>
+          <button 
+            type="button"
+            onClick={() => addCustomItem()} 
+            className="flex items-center gap-2 px-5 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl font-black text-xs shadow-md transition-all"
+          >
+            <Sparkles className="w-4 h-4" /> Tambah Barang Spot / Custom (Non-Price List)
+          </button>
+        </div>
+
+        {/* Notes & Grand Total Breakdown */}
         <div className="mt-8 border-t border-slate-200/60 pt-6 flex flex-col lg:flex-row justify-between gap-6">
           <div className="flex-1 space-y-4">
             <div>
@@ -1005,4 +1655,3 @@ export function CreateQuotation({
     </div>
   );
 }
-

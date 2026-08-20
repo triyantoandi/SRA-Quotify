@@ -190,11 +190,19 @@ export default function App() {
   if (!currentUser) {
     return (
       <LoginScreen 
-        onLogin={(u, p) => { 
-          const cleanU = (u || '').trim().toLowerCase();
-          const cleanP = (p || '').trim();
+        users={users}
+        detectedEmail="triyantoandi80@gmail.com"
+        onLogin={(identifier, password) => { 
+          const cleanId = (identifier || '').trim().toLowerCase();
+          const cleanP = (password || '').trim();
           const candidateUsers = [...(Array.isArray(users) ? users : []), ...initialUsers];
-          const usr = candidateUsers.find(x => x && (x.username || '').trim().toLowerCase() === cleanU && String(x.password || '').trim() === cleanP); 
+          const usr = candidateUsers.find(x => 
+            x && (
+              (x.username || '').trim().toLowerCase() === cleanId || 
+              (x.email || '').trim().toLowerCase() === cleanId
+            ) && String(x.password || '').trim() === cleanP
+          ); 
+
           if (usr) { 
             const rawRole = usr.role || 'sales';
             const safeUser: User = {
@@ -212,10 +220,49 @@ export default function App() {
             setEditingQuote(null);
             showToastMsg(`Selamat datang, ${safeUser.name}`); 
             logActivity('LOGIN', `Login sukses sebagai ${safeUser.role.toUpperCase()}`); 
+            return true;
           } else {
-            showToastMsg('Username atau password tidak sesuai! Gunakan admin / 123', 'error'); 
+            showToastMsg('Email/Username atau password tidak sesuai!', 'error'); 
+            return false;
           }
         }} 
+        onRegister={(newUser) => {
+          setUsers(prev => [newUser, ...prev]);
+          syncToCloud('saveUser', 'user', newUser);
+          setCurrentUser(newUser);
+          setActiveTab('dashboard');
+          setViewingQuote(null);
+          setEditingQuote(null);
+          showToastMsg(`Pendaftaran sukses! Selamat datang, ${newUser.name}`);
+          logActivity('REGISTER_USER', `Pengguna baru mendaftar: ${newUser.name} (${newUser.email})`);
+          logActivity('LOGIN', `Login otomatis pendaftaran sebagai ${newUser.role.toUpperCase()}`);
+        }}
+        onResetPassword={(emailOrUsername, newPassword) => {
+          const cleanTarget = (emailOrUsername || '').trim().toLowerCase();
+          const candidateUsers = [...(Array.isArray(users) ? users : []), ...initialUsers];
+          const existingUser = candidateUsers.find(
+            u => (u?.email && u.email.trim().toLowerCase() === cleanTarget) ||
+                 (u?.username && u.username.trim().toLowerCase() === cleanTarget)
+          );
+
+          if (existingUser) {
+            const updatedUser: User = {
+              ...existingUser,
+              password: newPassword
+            };
+            setUsers(prev => {
+              const filtered = prev.filter(u => u.id !== existingUser.id && u.username !== existingUser.username);
+              return [updatedUser, ...filtered];
+            });
+            syncToCloud('saveUser', 'user', updatedUser);
+            showToastMsg(`Password untuk akun ${existingUser.name} berhasil diperbarui!`);
+            logActivity('RESET_PASSWORD', `Reset password berhasil untuk: ${existingUser.name} (${existingUser.email || existingUser.username})`);
+            return true;
+          } else {
+            showToastMsg('Akun tidak ditemukan!', 'error');
+            return false;
+          }
+        }}
       />
     );
   }
@@ -323,12 +370,29 @@ export default function App() {
           settings={settings} 
           currentUser={currentUser} 
           initialData={editingQuote} 
-          onSave={(quote) => { 
+          onSave={(quote, newCustomerToSave, newItemsToSave) => { 
             const isEdit = !!editingQuote && !!editingQuote.id; 
             setQuotations(isEdit ? quotations.map(q => q.id === quote.id ? quote : q) : [quote, ...quotations]); 
+            
+            // If new customer was created and requested to save to master
+            if (newCustomerToSave) {
+              setCustomers(prev => [newCustomerToSave, ...prev]);
+              syncToCloud('saveCustomer', 'customer', newCustomerToSave);
+              logActivity('CREATE_CUSTOMER', `Auto-registered customer: ${newCustomerToSave.name}`);
+            }
+
+            // If new items were created and requested to save to master catalog
+            if (newItemsToSave && newItemsToSave.length > 0) {
+              setItems(prev => [...newItemsToSave, ...prev]);
+              newItemsToSave.forEach(newItem => {
+                syncToCloud('saveItem', 'item', newItem);
+                logActivity('CREATE_ITEM', `Auto-registered spot item: ${newItem.name}`);
+              });
+            }
+
             setActiveTab('quotations'); 
             setEditingQuote(null); 
-            showToastMsg(isEdit ? "Update sukses" : "Dibuat"); 
+            showToastMsg(isEdit ? "Update penawaran sukses" : "Penawaran berhasil dibuat"); 
             logActivity(isEdit ? 'UPDATE_QUOTATION' : 'CREATE_QUOTATION', `${quote.id}`); 
             syncToCloud('saveQuotation', 'quotation', quote);
           }} 

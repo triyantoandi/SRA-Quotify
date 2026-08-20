@@ -144,13 +144,21 @@ export function PrintableQuotation({
           <tbody>
             ${safeQuoteItems.map((qi, idx) => {
               const itemInfo = (items || []).find(i => i?.id === qi?.itemId);
+              const displayName = qi?.itemName || itemInfo?.name || 'Item Non-Katalog';
+              const displaySku = qi?.itemSku || itemInfo?.sku || '';
+              const displayUnit = qi?.itemUnit || itemInfo?.unit || 'Dus';
+              const displayDesc = qi?.itemDescription || itemInfo?.description || '';
               let discountDisplay = '-';
               if (qi?.itemDiscount && qi.itemDiscount > 0) discountDisplay = qi.itemDiscountType === 'percentage' ? `${qi.itemDiscount}%` : formatIDR(qi.itemDiscount);
               return `
                 <tr>
                   <td align="center">${idx + 1}</td>
-                  <td><b>${itemInfo?.name || 'Item'}</b><br/><small style="font-size: 9pt; color: #555;">${itemInfo?.sku || ''}</small></td>
-                  <td align="center">${qi?.qty || 0} ${itemInfo?.unit || ''}</td>
+                  <td>
+                    <b>${displayName}</b>
+                    ${displaySku ? `<br/><small style="font-size: 8.5pt; color: #555;">SKU: ${displaySku}</small>` : ''}
+                    ${displayDesc ? `<br/><small style="font-size: 8pt; color: #777; font-style: italic;">${displayDesc}</small>` : ''}
+                  </td>
+                  <td align="center">${qi?.qty || 0} ${displayUnit}</td>
                   <td align="right">${formatIDR(Number(qi?.unitPrice) || 0)}</td>
                   ${hasItemDiscount ? `<td align="right">${discountDisplay}</td>` : ''}
                   <td align="right">${formatIDR(Number(qi?.subtotal) || 0)}</td>
@@ -520,11 +528,21 @@ export function PrintableQuotation({
                   <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}>
                     <td className="py-2.5 px-3 text-center text-slate-500 font-semibold">{idx + 1}</td>
                     <td className="py-2.5 px-3">
-                      <p className="font-bold text-slate-900">{itemInfo?.name || 'Item Terhapus'}</p>
-                      <p className="text-[8.5pt] text-slate-500 font-mono mt-0.5">{itemInfo?.sku || '-'}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-slate-900">{qi?.itemName || itemInfo?.name || 'Item Non-Katalog'}</p>
+                        {qi?.isCustomItem && (
+                          <span className="text-[7pt] bg-purple-100 text-purple-800 font-black px-1.5 py-0.5 rounded">Spot / Custom</span>
+                        )}
+                      </div>
+                      {(qi?.itemSku || itemInfo?.sku) && (
+                        <p className="text-[8.5pt] text-slate-500 font-mono mt-0.5">{qi?.itemSku || itemInfo?.sku}</p>
+                      )}
+                      {(qi?.itemDescription || itemInfo?.description) && (
+                        <p className="text-[8pt] text-slate-500 italic mt-0.5">{qi?.itemDescription || itemInfo?.description}</p>
+                      )}
                     </td>
                     <td className="py-2.5 px-3 text-center font-semibold text-slate-800">
-                      {qi?.qty || 0} <span className="text-[8.5pt] text-slate-500 ml-0.5">{itemInfo?.unit || 'Pcs'}</span>
+                      {qi?.qty || 0} <span className="text-[8.5pt] text-slate-500 ml-0.5">{qi?.itemUnit || itemInfo?.unit || 'Dus'}</span>
                     </td>
                     <td className="py-2.5 px-3 text-right tabular-nums text-slate-800 font-semibold">{formatIDR(Number(qi?.unitPrice) || 0)}</td>
                     {hasItemDiscount && (
