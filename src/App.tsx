@@ -92,12 +92,28 @@ export default function App() {
   useEffect(() => { localStorage.setItem('sra_cfg', JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem('sra_log', JSON.stringify(activityLogs)); }, [activityLogs]);
 
-  // Purge legacy demo quotations if they exist in Firestore
+  // Purge legacy demo quotations, customers, and items if they exist in Firestore / localStorage
   useEffect(() => {
     const legacyDemoQuoteIds = ['QUO-202608-101', 'QUO-202608-102', 'QUO-202608-103'];
     legacyDemoQuoteIds.forEach(id => {
       deleteFirestoreDoc('quotations', id).catch(() => {});
     });
+    
+    // Purge demo customers and items
+    ['CUST-001', 'CUST-002'].forEach(id => {
+      deleteFirestoreDoc('customers', id).catch(() => {});
+    });
+    ['1', '2', '3'].forEach(id => {
+      deleteFirestoreDoc('items', id).catch(() => {});
+    });
+
+    // Sanitize localStorage immediately
+    const localQuotes = safeJsonParse<Quotation[]>('sra_quo', []);
+    if (Array.isArray(localQuotes) && localQuotes.some(q => legacyDemoQuoteIds.includes(q?.id))) {
+      const cleaned = localQuotes.filter(q => !legacyDemoQuoteIds.includes(q?.id));
+      localStorage.setItem('sra_quo', JSON.stringify(cleaned));
+      setQuotations(cleaned);
+    }
   }, []);
 
   // Subscribe to real-time updates from Firebase Firestore
@@ -454,6 +470,8 @@ export default function App() {
         <QuotationsList 
           quotations={quotations} 
           items={items}
+          customers={customers}
+          activityLogs={activityLogs}
           users={users}
           setQuotations={setQuotations} 
           currentUser={currentUser} 
@@ -508,6 +526,7 @@ export default function App() {
               syncToCloud('deleteQuotation', 'quotation', { id });
             });
           }} 
+          onClearSimulationData={handleClearSimulationData}
           showToast={showToastMsg} 
           logActivity={logActivity} 
           syncToCloud={syncToCloud} 

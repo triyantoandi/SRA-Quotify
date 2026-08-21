@@ -97,11 +97,26 @@ export function subscribeCollection<T extends { id: string }>(
           onData([]);
         }
       } else {
-        const docsData = snapshot.docs.map(d => ({
-          ...d.data(),
-          id: d.id
-        })) as T[];
-        onData(docsData);
+        const legacyDemoIds = ['QUO-202608-101', 'QUO-202608-102', 'QUO-202608-103'];
+        const docsData = snapshot.docs
+          .map(d => ({
+            ...d.data(),
+            id: d.id
+          })) as T[];
+
+        // Purge legacy demo docs if encountered
+        if (collectionName === 'quotations') {
+          const filtered = docsData.filter(d => {
+            if (legacyDemoIds.includes(d.id)) {
+              deleteDoc(doc(db, 'quotations', d.id)).catch(() => {});
+              return false;
+            }
+            return true;
+          });
+          onData(filtered);
+        } else {
+          onData(docsData);
+        }
       }
     } catch (err) {
       console.error(`Error processing snapshot for ${collectionName}:`, err);

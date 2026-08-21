@@ -4,18 +4,21 @@ import {
   AlertTriangle, Info, Printer, Edit, Copy, Trash2, Download, 
   MessageCircle, Building2, Filter, Eye, Layers, Calendar,
   ClipboardList, Bell, DollarSign, ArrowRightCircle, ShieldAlert,
-  Check, Store, UserCheck, Users, ShieldCheck, Shield
+  Check, Store, UserCheck, Users, ShieldCheck, Shield, Sparkles
 } from 'lucide-react';
-import { Quotation, User, Item } from '../types';
+import { Quotation, User, Item, Customer, ActivityLog } from '../types';
 import { 
   formatIDR, getDueReminderInfo, calculateDueDate, 
   isSupervisoryRole, checkDocumentOwnership 
 } from '../utils/helpers';
 import { exportQuotationsToExcel } from '../utils/excelHelpers';
+import { ClearSimulationDataModal } from './ClearSimulationDataModal';
 
 interface QuotationsListProps {
   quotations: Quotation[];
   items?: Item[];
+  customers?: Customer[];
+  activityLogs?: ActivityLog[];
   users?: User[];
   setQuotations: React.Dispatch<React.SetStateAction<Quotation[]>>;
   currentUser: User;
@@ -25,6 +28,12 @@ interface QuotationsListProps {
   onEdit: (quote: Quotation) => void;
   onDuplicate: (quote: Quotation) => void;
   onDelete: (id: string) => void;
+  onClearSimulationData?: (options: {
+    clearQuotations: boolean;
+    clearCustomers: boolean;
+    clearItems: boolean;
+    clearLogs: boolean;
+  }) => Promise<void>;
   showToast: (msg: string, type?: 'success' | 'error') => void;
   logActivity: (action: string, details: string) => void;
   syncToCloud: (action: string, payloadKey: string, payloadData: any) => void;
@@ -33,6 +42,8 @@ interface QuotationsListProps {
 export function QuotationsList({ 
   quotations, 
   items = [], 
+  customers = [],
+  activityLogs = [],
   users = [],
   setQuotations, 
   currentUser, 
@@ -42,10 +53,12 @@ export function QuotationsList({
   onEdit, 
   onDuplicate, 
   onDelete, 
+  onClearSimulationData,
   showToast, 
   logActivity, 
   syncToCloud 
 }: QuotationsListProps) {
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   const [search, setSearch] = useState(''); 
   const [docTypeFilter, setDocTypeFilter] = useState<'ALL' | 'QUOTATION' | 'SALES_ORDER' | 'DUE_SOON'>('ALL');
   const [statusFilter, setStatusFilter] = useState('Semua'); 
@@ -374,6 +387,15 @@ export function QuotationsList({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
+          {isManager && onClearSimulationData && (
+            <button 
+              onClick={() => setIsClearModalOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-2xl font-bold text-xs transition-all shadow-xs cursor-pointer"
+              title="Hapus massal data simulasi penawaran, klien, atau produk demo"
+            >
+              <Trash2 className="w-4 h-4 text-rose-600" /> Hapus Data Simulasi
+            </button>
+          )}
           <button 
             onClick={handleExportExcel} 
             className="flex items-center gap-2 px-4 py-2.5 clay-button-secondary text-slate-800 font-extrabold text-xs sm:text-sm"
@@ -916,6 +938,21 @@ export function QuotationsList({
           </table>
         </div>
       </div>
+
+      {/* Clear Simulation Data Modal */}
+      {isClearModalOpen && onClearSimulationData && (
+        <ClearSimulationDataModal
+          isOpen={isClearModalOpen}
+          onClose={() => setIsClearModalOpen(false)}
+          currentUser={currentUser || null}
+          quotations={quotations}
+          customers={customers}
+          items={items}
+          activityLogs={activityLogs}
+          onClearData={onClearSimulationData}
+          showToast={showToast}
+        />
+      )}
     </div>
   );
 }
