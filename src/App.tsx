@@ -191,7 +191,6 @@ export default function App() {
     return (
       <LoginScreen 
         users={users}
-        detectedEmail="triyantoandi80@gmail.com"
         onLogin={(identifier, password) => { 
           const cleanId = (identifier || '').trim().toLowerCase();
           const cleanP = (password || '').trim();

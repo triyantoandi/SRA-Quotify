@@ -13,15 +13,13 @@ interface LoginScreenProps {
   onLogin: (identifier: string, password: string) => boolean | void;
   onRegister?: (newUser: User) => void;
   onResetPassword?: (email: string, newPassword: string) => boolean;
-  detectedEmail?: string;
 }
 
 export function LoginScreen({ 
   users = [], 
   onLogin, 
   onRegister, 
-  onResetPassword,
-  detectedEmail = 'triyantoandi80@gmail.com' 
+  onResetPassword
 }: LoginScreenProps) {
   // Screen views: 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD'
   const [viewMode, setViewMode] = useState<'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD'>('LOGIN');
@@ -53,42 +51,11 @@ export function LoginScreen({
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
-  // Auto-detect active email
-  const activeDetectedEmail = detectedEmail || 'triyantoandi80@gmail.com';
-  const existingDetectedUser = users.find(
-    u => u?.email?.toLowerCase() === activeDetectedEmail.toLowerCase() ||
-         u?.username?.toLowerCase() === activeDetectedEmail.split('@')[0]?.toLowerCase()
-  );
-
   // Reset messages when changing view
   const switchView = (mode: 'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD') => {
     setViewMode(mode);
     setErrorMsg('');
     setSuccessMsg('');
-  };
-
-  // Pre-fill email in register form if triggered by auto-detect
-  const handleUseDetectedEmailForRegister = () => {
-    const namePart = activeDetectedEmail.split('@')[0];
-    const formattedName = namePart
-      .replace(/[._0-9]/g, ' ')
-      .trim()
-      .split(' ')
-      .filter(Boolean)
-      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ') || 'Andi Triyanto';
-
-    setRegEmail(activeDetectedEmail);
-    setRegName(formattedName);
-    setRegUsername(namePart.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'user');
-    setViewMode('REGISTER');
-    setErrorMsg('');
-    setSuccessMsg(`Email aktif ${activeDetectedEmail} berhasil dimuat ke formulir.`);
-  };
-
-  const handleUseDetectedEmailForLogin = () => {
-    setLoginIdentifier(activeDetectedEmail);
-    setErrorMsg('');
   };
 
   // Handle Login Submit
@@ -257,43 +224,6 @@ export function LoginScreen({
           </p>
         </div>
 
-        {/* ACTIVE EMAIL AUTO-DETECTION BANNER */}
-        {activeDetectedEmail && (
-          <div className="mx-4 mt-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/80 rounded-2xl flex items-center justify-between gap-2 shadow-2xs">
-            <div className="flex items-center gap-2.5 overflow-hidden">
-              <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase text-blue-700 tracking-wider">Email Aktif Terdeteksi</p>
-                <p className="text-xs font-black text-slate-900 truncate">{activeDetectedEmail}</p>
-              </div>
-            </div>
-
-            {viewMode === 'LOGIN' && (
-              <button
-                type="button"
-                onClick={handleUseDetectedEmailForLogin}
-                className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-[11px] shrink-0 transition-colors shadow-xs flex items-center gap-1"
-                title="Gunakan email ini untuk login"
-              >
-                Gunakan <ArrowRight className="w-3 h-3" />
-              </button>
-            )}
-
-            {viewMode === 'REGISTER' && (
-              <button
-                type="button"
-                onClick={handleUseDetectedEmailForRegister}
-                className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-[11px] shrink-0 transition-colors shadow-xs flex items-center gap-1"
-                title="Isi form dengan email ini"
-              >
-                Isi Cepat <ArrowRight className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-        )}
-
         {/* FEEDBACK MESSAGES */}
         {errorMsg && (
           <div className="mx-4 mt-3 p-3 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-2 text-xs text-rose-800 font-bold animate-in fade-in">
@@ -387,13 +317,7 @@ export function LoginScreen({
               </p>
               <button
                 type="button"
-                onClick={() => {
-                  if (activeDetectedEmail && !existingDetectedUser) {
-                    handleUseDetectedEmailForRegister();
-                  } else {
-                    switchView('REGISTER');
-                  }
-                }}
+                onClick={() => switchView('REGISTER')}
                 className="w-full py-2.5 clay-button-secondary text-emerald-800 font-black text-xs flex items-center justify-center gap-2 hover:bg-emerald-50 transition-colors"
               >
                 <UserPlus className="w-4 h-4 text-emerald-600" />
