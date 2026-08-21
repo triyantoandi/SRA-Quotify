@@ -56,16 +56,16 @@ export default function App() {
   const [editingQuote, setEditingQuote] = useState<Quotation | null>(null);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState<boolean>(false);
   const [items, setItems] = useState<Item[]>(() => {
-    const saved = safeJsonParse<Item[]>('sra_itm', initialItems);
-    return (Array.isArray(saved) && saved.length > 0) ? saved : initialItems;
+    const saved = safeJsonParse<Item[]>('sra_itm', []);
+    return Array.isArray(saved) ? saved : [];
   });
   const [customers, setCustomers] = useState<Customer[]>(() => {
-    const saved = safeJsonParse<Customer[]>('sra_cust', initialCustomers);
-    return (Array.isArray(saved) && saved.length > 0) ? saved : initialCustomers;
+    const saved = safeJsonParse<Customer[]>('sra_cust', []);
+    return Array.isArray(saved) ? saved : [];
   });
   const [quotations, setQuotations] = useState<Quotation[]>(() => {
-    const saved = safeJsonParse<Quotation[]>('sra_quo', initialQuotations);
-    return (Array.isArray(saved) && saved.length > 0) ? saved : initialQuotations;
+    const saved = safeJsonParse<Quotation[]>('sra_quo', []);
+    return Array.isArray(saved) ? saved : [];
   });
   const [settings, setSettings] = useState<Settings>(() => {
     const saved = safeJsonParse<Partial<Settings>>('sra_cfg', defaultSettings);
@@ -92,14 +92,22 @@ export default function App() {
   useEffect(() => { localStorage.setItem('sra_cfg', JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem('sra_log', JSON.stringify(activityLogs)); }, [activityLogs]);
 
+  // Purge legacy demo quotations if they exist in Firestore
+  useEffect(() => {
+    const legacyDemoQuoteIds = ['QUO-202608-101', 'QUO-202608-102', 'QUO-202608-103'];
+    legacyDemoQuoteIds.forEach(id => {
+      deleteFirestoreDoc('quotations', id).catch(() => {});
+    });
+  }, []);
+
   // Subscribe to real-time updates from Firebase Firestore
   useEffect(() => {
-    const unsubItems = subscribeCollection<Item>('items', setItems, initialItems);
-    const unsubCustomers = subscribeCollection<Customer>('customers', setCustomers, initialCustomers);
-    const unsubQuotations = subscribeCollection<Quotation>('quotations', setQuotations, initialQuotations);
+    const unsubItems = subscribeCollection<Item>('items', setItems);
+    const unsubCustomers = subscribeCollection<Customer>('customers', setCustomers);
+    const unsubQuotations = subscribeCollection<Quotation>('quotations', setQuotations);
     const unsubUsers = subscribeCollection<User>('users', setUsers, initialUsers);
     const unsubSettings = subscribeDoc<Settings>('settings', 'appSettings', setSettings, defaultSettings);
-    const unsubLogs = subscribeCollection<ActivityLog>('activityLogs', setActivityLogs, []);
+    const unsubLogs = subscribeCollection<ActivityLog>('activityLogs', setActivityLogs);
 
     return () => {
       unsubItems();
@@ -490,7 +498,11 @@ export default function App() {
               return;
             }
             showConfirm("Hapus Penawaran?", "Data penawaran akan dihapus secara permanen.", () => { 
-              setQuotations(quotations.filter(q => q.id !== id)); 
+              setQuotations(prev => {
+                const next = prev.filter(q => q.id !== id);
+                localStorage.setItem('sra_quo', JSON.stringify(next));
+                return next;
+              }); 
               showToastMsg("Penawaran berhasil dihapus"); 
               logActivity('DEL_QUOTE', id); 
               syncToCloud('deleteQuotation', 'quotation', { id });

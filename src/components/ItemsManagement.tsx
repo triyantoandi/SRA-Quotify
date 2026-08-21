@@ -352,7 +352,14 @@ export function ItemsManagement({
                       {!isSales && (
                         <div className="flex gap-1.5 opacity-90 md:opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => { setFormData(item); setEditingItem(item); }} className="p-2 clay-button-secondary text-blue-700" title="Edit"><Edit className="w-3.5 h-3.5"/></button>
-                          <button onClick={() => showConfirm("Hapus Barang?", "Data hilang permanen.", () => { setItems(items.filter(i => i.id !== item.id)); showToast("Dihapus"); logActivity('DELETE_ITEM', `Hapus ${item.name}`); syncToCloud('deleteItem', 'item', { id: item.id }); })} className="p-2 clay-button-secondary text-rose-700" title="Hapus"><Trash2 className="w-3.5 h-3.5"/></button>
+                          <button onClick={() => showConfirm("Hapus Barang?", "Data hilang permanen.", () => { 
+                            const next = items.filter(i => i.id !== item.id);
+                            setItems(next); 
+                            localStorage.setItem('sra_itm', JSON.stringify(next));
+                            showToast("Dihapus"); 
+                            logActivity('DELETE_ITEM', `Hapus ${item.name}`); 
+                            syncToCloud('deleteItem', 'item', { id: item.id }); 
+                          })} className="p-2 clay-button-secondary text-rose-700" title="Hapus"><Trash2 className="w-3.5 h-3.5"/></button>
                         </div>
                       )}
                     </div>
@@ -478,7 +485,14 @@ export function ItemsManagement({
                   {!isSales && (
                     <div className="flex items-center gap-1.5 shrink-0 self-end md:self-center border-t md:border-t-0 pt-2 md:pt-0 border-slate-100">
                       <button onClick={() => { setFormData(item); setEditingItem(item); }} className="p-2 clay-button-secondary text-blue-700" title="Edit"><Edit className="w-3.5 h-3.5"/></button>
-                      <button onClick={() => showConfirm("Hapus Barang?", "Data hilang permanen.", () => { setItems(items.filter(i => i.id !== item.id)); showToast("Dihapus"); logActivity('DELETE_ITEM', `Hapus ${item.name}`); syncToCloud('deleteItem', 'item', { id: item.id }); })} className="p-2 clay-button-secondary text-rose-700" title="Hapus"><Trash2 className="w-3.5 h-3.5"/></button>
+                      <button onClick={() => showConfirm("Hapus Barang?", "Data hilang permanen.", () => { 
+                        const next = items.filter(i => i.id !== item.id);
+                        setItems(next); 
+                        localStorage.setItem('sra_itm', JSON.stringify(next));
+                        showToast("Dihapus"); 
+                        logActivity('DELETE_ITEM', `Hapus ${item.name}`); 
+                        syncToCloud('deleteItem', 'item', { id: item.id }); 
+                      })} className="p-2 clay-button-secondary text-rose-700" title="Hapus"><Trash2 className="w-3.5 h-3.5"/></button>
                     </div>
                   )}
                 </div>

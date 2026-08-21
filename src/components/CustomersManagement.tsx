@@ -479,7 +479,8 @@ export function CustomersManagement({
                         </button>
                         <button 
                           onClick={() => showConfirm("Hapus Klien?", `Data klien ${customer.name} akan dihapus secara permanen.`, () => { 
-                            setCustomers(customers.filter(c => c.id !== customer.id)); 
+                            setCustomers(customers.filter(c => c.id !== customer.id));
+                            localStorage.setItem('sra_cust', JSON.stringify(customers.filter(c => c.id !== customer.id)));
                             showToast("Data klien dihapus"); 
                             logActivity('DELETE_CUSTOMER', `Hapus ${customer.name}`); 
                             syncToCloud('deleteCustomer', 'customer', { id: customer.id }); 

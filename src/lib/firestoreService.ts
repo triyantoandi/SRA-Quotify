@@ -79,11 +79,9 @@ export function subscribeCollection<T extends { id: string }>(
   const unsubscribe = onSnapshot(colRef, async (snapshot) => {
     try {
       if (snapshot.empty) {
-        // If collection was explicitly initialized or cleared, deliver empty list
-        const wasCleared = localStorage.getItem(`sra_cleared_${collectionName}`);
-        if (!wasCleared && initialFallback && initialFallback.length > 0) {
+        // Only seed initial users if users collection is completely empty (needed for login)
+        if (collectionName === 'users' && initialFallback && initialFallback.length > 0) {
           onData(initialFallback);
-          // Seed documents to Firestore in background on first fresh setup
           for (const item of initialFallback) {
             if (item && item.id) {
               try {
@@ -95,6 +93,7 @@ export function subscribeCollection<T extends { id: string }>(
             }
           }
         } else {
+          // For all business documents (quotations, items, customers, logs), empty stays empty
           onData([]);
         }
       } else {
@@ -107,7 +106,7 @@ export function subscribeCollection<T extends { id: string }>(
     } catch (err) {
       console.error(`Error processing snapshot for ${collectionName}:`, err);
       handleFirestoreError(err, OperationType.LIST, collectionName);
-      if (initialFallback && !localStorage.getItem(`sra_cleared_${collectionName}`)) {
+      if (collectionName === 'users' && initialFallback) {
         onData(initialFallback);
       } else {
         onData([]);
@@ -116,7 +115,7 @@ export function subscribeCollection<T extends { id: string }>(
   }, (err) => {
     console.error(`Firestore subscribe error [${collectionName}]:`, err);
     handleFirestoreError(err, OperationType.LIST, collectionName);
-    if (initialFallback && !localStorage.getItem(`sra_cleared_${collectionName}`)) {
+    if (collectionName === 'users' && initialFallback) {
       onData(initialFallback);
     } else {
       onData([]);
