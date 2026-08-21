@@ -3,7 +3,7 @@ import {
   Download, UserPlus, Search, Edit, Trash2, Mail, 
   Phone, FileSpreadsheet, Upload, Plus, FileText, 
   Building, MapPin, CreditCard, Eye, X, History, ArrowRight, Store,
-  AlertTriangle, ShieldCheck, DollarSign, Lock, Unlock, AlertCircle
+  AlertTriangle, ShieldCheck, DollarSign, Lock, Unlock, AlertCircle, Clock
 } from 'lucide-react';
 import { Customer, Quotation } from '../types';
 import { CustomersImportModal } from './CustomersImportModal';
@@ -40,22 +40,26 @@ export function CustomersManagement({
     phone: '', 
     address: '', 
     npwp: '',
+    hasCreditLimit: true,
     creditLimit: 50000000,
     warningThresholdPct: 10,
     allowOverlimit: false,
     creditNotes: ''
   }); 
   const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'PLAFON' | 'CBD'>('ALL');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [selectedCustomerForHistory, setSelectedCustomerForHistory] = useState<Customer | null>(null);
   
   const handleSave = () => {
     if (!formData.name.trim()) return showToast("Nama Pelanggan / Perusahaan wajib diisi!", "error");
-    const parsedLimit = Number(formData.creditLimit) || 0;
+    const isPlafon = formData.hasCreditLimit !== false;
+    const parsedLimit = isPlafon ? (Number(formData.creditLimit) || 0) : 0;
     const parsedWarning = Number(formData.warningThresholdPct) || 10;
     
-    const customerPayload = {
+    const customerPayload: Omit<Customer, 'id'> = {
       ...formData,
+      hasCreditLimit: isPlafon,
       creditLimit: parsedLimit,
       warningThresholdPct: parsedWarning
     };
@@ -63,16 +67,16 @@ export function CustomersManagement({
     if (editingItem === 'NEW') {
       const newCust: Customer = { ...customerPayload, id: `CUST-${Date.now().toString().slice(-6)}` };
       setCustomers([newCust, ...customers]); 
-      logActivity('CREATE_CUSTOMER', `Tambah klien: ${formData.name}${formData.storeName ? ` (${formData.storeName})` : ''} - Plafon: ${formatIDR(parsedLimit)}`); 
+      logActivity('CREATE_CUSTOMER', `Tambah klien: ${formData.name}${formData.storeName ? ` (${formData.storeName})` : ''} - Skema: ${isPlafon ? `Plafon ${formatIDR(parsedLimit)}` : 'Cash Before Delivery (CBD)'}`); 
       syncToCloud('saveCustomer', 'customer', newCust);
     } else if (editingItem) {
       const updatedCust: Customer = { ...customerPayload, id: editingItem.id };
       setCustomers(customers.map(c => c.id === editingItem.id ? updatedCust : c)); 
-      logActivity('UPDATE_CUSTOMER', `Edit klien: ${formData.name} - Plafon: ${formatIDR(parsedLimit)}`); 
+      logActivity('UPDATE_CUSTOMER', `Edit klien: ${formData.name} - Skema: ${isPlafon ? `Plafon ${formatIDR(parsedLimit)}` : 'Cash Before Delivery (CBD)'}`); 
       syncToCloud('saveCustomer', 'customer', updatedCust);
     }
     setEditingItem(null); 
-    showToast("Data pelanggan & plafon limit berhasil disimpan");
+    showToast("Data pelanggan & skema plafon/CBD berhasil disimpan");
   };
 
   const handleExport = () => {
@@ -116,20 +120,6 @@ export function CustomersManagement({
     }
   };
 
-  const filteredCustomers = (customers || []).filter(c => {
-    if (!c) return false;
-    const q = search.toLowerCase().trim();
-    if (!q) return true;
-    return (
-      (c.name || '').toLowerCase().includes(q) ||
-      (c.storeName && c.storeName.toLowerCase().includes(q)) ||
-      (c.attnName && c.attnName.toLowerCase().includes(q)) ||
-      (c.email && c.email.toLowerCase().includes(q)) ||
-      (c.phone && c.phone.includes(q)) ||
-      (c.npwp && c.npwp.includes(q))
-    );
-  });
-
   // Calculate customer quotation stats
   const getCustomerQuoteStats = (customerName: string) => {
     const target = (customerName || '').toLowerCase().trim();
@@ -147,11 +137,36 @@ export function CustomersManagement({
   const customersWithNpwp = (customers || []).filter(c => c && c.npwp && c.npwp.trim().length > 3).length;
 
   // Credit limits statistics
-  const totalCreditLimit = customers.reduce((sum, c) => sum + (Number(c.creditLimit) || 0), 0);
+  const cbdCustomersCount = customers.filter(c => c.hasCreditLimit === false || (c.hasCreditLimit === undefined && (c.creditLimit ?? 0) <= 0)).length;
+  const plafonCustomersCount = customers.length - cbdCustomersCount;
+  const totalCreditLimit = customers.reduce((sum, c) => {
+    const isPlafon = c.hasCreditLimit !== false && (c.creditLimit ?? 0) > 0;
+    return isPlafon ? sum + (Number(c.creditLimit) || 0) : sum;
+  }, 0);
   const criticalLimitCount = customers.filter(c => {
+    const isPlafon = c.hasCreditLimit !== false && (c.creditLimit ?? 0) > 0;
+    if (!isPlafon) return false;
     const creditStatus = getCustomerCreditStatus(c, customers, quotations);
     return creditStatus.isExhausted || creditStatus.isNearExhaustion;
   }).length;
+
+  const filteredCustomers = (customers || []).filter(c => {
+    if (!c) return false;
+    const isCbd = c.hasCreditLimit === false || (c.hasCreditLimit === undefined && (c.creditLimit ?? 0) <= 0);
+    if (categoryFilter === 'PLAFON' && isCbd) return false;
+    if (categoryFilter === 'CBD' && !isCbd) return false;
+
+    const q = search.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.storeName && c.storeName.toLowerCase().includes(q)) ||
+      (c.attnName && c.attnName.toLowerCase().includes(q)) ||
+      (c.email && c.email.toLowerCase().includes(q)) ||
+      (c.phone && c.phone.includes(q)) ||
+      (c.npwp && c.npwp.includes(q))
+    );
+  });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 relative z-10 font-sans pb-12">
@@ -159,7 +174,7 @@ export function CustomersManagement({
       <div className="flex flex-col md:flex-row justify-between md:items-end gap-4">
         <div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">Master Pelanggan & Plafon Kredit</h2>
-          <p className="text-slate-500 text-sm font-semibold mt-0.5">Kelola direktori klien, kesepakatan limit transaksi (credit limit), dan histori SO/Quotation</p>
+          <p className="text-slate-500 text-sm font-semibold mt-0.5">Kelola direktori klien, opsi plafon tempo vs Cash Before Delivery (CBD), dan histori transaksi</p>
         </div>
         {!editingItem && (
           <div className="flex flex-wrap gap-2.5">
@@ -192,6 +207,7 @@ export function CustomersManagement({
                   phone: '', 
                   address: '', 
                   npwp: '',
+                  hasCreditLimit: true,
                   creditLimit: 50000000,
                   warningThresholdPct: 10,
                   allowOverlimit: false,
@@ -199,7 +215,7 @@ export function CustomersManagement({
                 }); 
                 setEditingItem('NEW'); 
               }} 
-              className="px-5 py-2.5 clay-button-primary text-white font-black text-xs sm:text-sm flex items-center gap-2"
+              className="px-5 py-2.5 clay-button-primary text-white font-black text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
             >
               <UserPlus className="w-4 h-4" /> Tambah Klien
             </button>
@@ -216,7 +232,9 @@ export function CustomersManagement({
             </div>
             <div>
               <p className="text-[10px] uppercase font-black text-slate-500">Total Klien Terdaftar</p>
-              <p className="text-lg font-black text-slate-900 leading-tight">{customers.length} Perusahaan</p>
+              <p className="text-lg font-black text-slate-900 leading-tight">
+                {customers.length} <span className="text-xs font-bold text-slate-500">({plafonCustomersCount} Plafon / {cbdCustomersCount} CBD)</span>
+              </p>
             </div>
           </div>
 
@@ -241,13 +259,13 @@ export function CustomersManagement({
           </div>
 
           <div className="clay-card p-4 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center font-black">
-              <CreditCard className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-800 flex items-center justify-center font-black">
+              <CreditCard className="w-5 h-5 text-sky-700" />
             </div>
             <div>
-              <p className="text-[10px] uppercase font-black text-slate-500">Kelengkapan NPWP</p>
-              <p className="text-lg font-black text-slate-900 leading-tight">
-                {customersWithNpwp} <span className="text-xs font-bold text-slate-500">/ {customers.length} ({customers.length > 0 ? Math.round((customersWithNpwp / customers.length) * 100) : 0}%)</span>
+              <p className="text-[10px] uppercase font-black text-slate-500">Klien Cash Before Delivery</p>
+              <p className="text-lg font-black text-sky-950 leading-tight">
+                {cbdCustomersCount} <span className="text-xs font-bold text-slate-500">Klien CBD</span>
               </p>
             </div>
           </div>
@@ -259,7 +277,7 @@ export function CustomersManagement({
         <div className="clay-card p-7 mb-6 animate-in zoom-in-95 duration-200">
           <h3 className="text-base font-black mb-5 text-slate-900 border-b border-slate-200/80 pb-3 flex items-center justify-between">
             <span>{editingItem === 'NEW' ? 'Tambah Pelanggan Baru' : 'Edit Data Pelanggan'}</span>
-            <span className="text-xs font-bold text-slate-500">Plafon kredit membatasi transaksi SO otomatis</span>
+            <span className="text-xs font-bold text-slate-500">Pilih opsi Plafon Kredit Tempo atau Cash Before Delivery (CBD)</span>
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div>
@@ -302,11 +320,11 @@ export function CustomersManagement({
                 value={formData.email} 
                 onChange={e => setFormData({...formData, email: e.target.value})} 
                 className="w-full p-3 clay-input text-sm font-semibold"
-                placeholder="purchasing@perusahaan.com"
+                placeholder="purchasing@company.com"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-2">Nomor Telepon / WhatsApp</label>
+              <label className="block text-xs font-bold text-slate-700 mb-2">No. Telepon / WhatsApp</label>
               <input 
                 type="text" 
                 value={formData.phone} 
@@ -326,77 +344,136 @@ export function CustomersManagement({
               />
             </div>
 
-            {/* Credit Limit & Transaction Threshold Box */}
-            <div className="md:col-span-2 p-5 bg-gradient-to-r from-amber-50/70 to-indigo-50/70 border border-amber-200/80 rounded-2xl space-y-4">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-indigo-700" />
-                <h4 className="text-sm font-black text-slate-900">Pengaturan Plafon Kredit & Batasan Transaksi Sales Order (SO)</h4>
+            {/* Credit Limit & CBD Policy Configuration Box */}
+            <div className="md:col-span-2 p-5 bg-gradient-to-r from-amber-50/70 via-indigo-50/50 to-sky-50/70 border border-amber-200/80 rounded-2xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/60 pb-3">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-indigo-700" />
+                  <h4 className="text-sm font-black text-slate-900">Ketentuan Plafon Kredit & Skema Pembayaran</h4>
+                </div>
+
+                {/* Segmented Switch: Pakai Plafon vs Cash Before Delivery */}
+                <div className="inline-flex p-1 bg-white/90 rounded-xl border border-slate-300/80 shadow-xs">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, hasCreditLimit: true })}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                      formData.hasCreditLimit !== false
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <DollarSign className="w-3.5 h-3.5" /> Pakai Plafon Kredit (Tempo)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, hasCreditLimit: false, creditLimit: 0 })}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                      formData.hasCreditLimit === false
+                        ? 'bg-sky-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5" /> Tanpa Plafon (Cash Before Delivery / CBD)
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-black text-slate-800 mb-1.5 flex items-center gap-1">
-                    <DollarSign className="w-3.5 h-3.5 text-indigo-700" /> Plafon Limit Transaksi (IDR)
-                  </label>
-                  <input 
-                    type="number" 
-                    value={formData.creditLimit ?? 50000000} 
-                    onChange={e => setFormData({...formData, creditLimit: Number(e.target.value) || 0})} 
-                    className="w-full p-2.5 clay-input text-sm font-black text-indigo-950 tabular-nums"
-                    placeholder="50000000"
-                  />
-                  <p className="text-[11px] text-slate-500 font-bold mt-1">
-                    Format: {formatIDR(Number(formData.creditLimit) || 0)}
-                  </p>
-                </div>
+              {formData.hasCreditLimit !== false ? (
+                /* SECTION A: PLAFON KREDIT AKTIF */
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs font-black text-slate-800 mb-1.5 flex items-center gap-1">
+                        <DollarSign className="w-3.5 h-3.5 text-indigo-700" /> Plafon Limit Transaksi (IDR)
+                      </label>
+                      <input 
+                        type="number" 
+                        value={formData.creditLimit ?? 50000000} 
+                        onChange={e => setFormData({...formData, creditLimit: Number(e.target.value) || 0})} 
+                        className="w-full p-2.5 clay-input text-sm font-black text-indigo-950 tabular-nums"
+                        placeholder="50000000"
+                      />
+                      <p className="text-[11px] text-slate-500 font-bold mt-1">
+                        Format: {formatIDR(Number(formData.creditLimit) || 0)}
+                      </p>
+                    </div>
 
-                <div>
-                  <label className="block text-xs font-black text-slate-800 mb-1.5 flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-700" /> Ambang Peringatan Alert Sisa Limit (%)
-                  </label>
-                  <input 
-                    type="number" 
-                    min="1" 
-                    max="50"
-                    value={formData.warningThresholdPct ?? 10} 
-                    onChange={e => setFormData({...formData, warningThresholdPct: Number(e.target.value) || 10})} 
-                    className="w-full p-2.5 clay-input text-sm font-black text-amber-950 tabular-nums"
-                    placeholder="10"
-                  />
-                  <p className="text-[11px] text-slate-500 font-bold mt-1">
-                    Alert muncul jika sisa limit ≤ {formData.warningThresholdPct ?? 10}% ({formatIDR((Number(formData.creditLimit) || 0) * ((formData.warningThresholdPct ?? 10) / 100))})
-                  </p>
-                </div>
+                    <div>
+                      <label className="block text-xs font-black text-slate-800 mb-1.5 flex items-center gap-1">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-700" /> Ambang Peringatan Alert Sisa Limit (%)
+                      </label>
+                      <input 
+                        type="number" 
+                        min="1" 
+                        max="50"
+                        value={formData.warningThresholdPct ?? 10} 
+                        onChange={e => setFormData({...formData, warningThresholdPct: Number(e.target.value) || 10})} 
+                        className="w-full p-2.5 clay-input text-sm font-black text-amber-950 tabular-nums"
+                        placeholder="10"
+                      />
+                      <p className="text-[11px] text-slate-500 font-bold mt-1">
+                        Alert muncul jika sisa limit ≤ {formData.warningThresholdPct ?? 10}% ({formatIDR((Number(formData.creditLimit) || 0) * ((formData.warningThresholdPct ?? 10) / 100))})
+                      </p>
+                    </div>
 
-                <div>
-                  <label className="block text-xs font-black text-slate-800 mb-1.5 flex items-center gap-1">
-                    <Lock className="w-3.5 h-3.5 text-emerald-700" /> Izin Override Manager Khusus
-                  </label>
-                  <div className="pt-2 flex items-center gap-2">
+                    <div>
+                      <label className="block text-xs font-black text-slate-800 mb-1.5 flex items-center gap-1">
+                        <Lock className="w-3.5 h-3.5 text-emerald-700" /> Izin Override Manager Khusus
+                      </label>
+                      <div className="pt-2 flex items-center gap-2">
+                        <input 
+                          type="checkbox" 
+                          id="allowOverlimitCheck"
+                          checked={formData.allowOverlimit === true} 
+                          onChange={e => setFormData({...formData, allowOverlimit: e.target.checked})}
+                          className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        />
+                        <label htmlFor="allowOverlimitCheck" className="text-xs font-bold text-slate-700 cursor-pointer">
+                          Bypass / Selalu Izinkan Order (Tanpa blokir)
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Catatan Kesepakatan Plafon Kredit / Ketentuan Sales</label>
                     <input 
-                      type="checkbox" 
-                      id="allowOverlimitCheck"
-                      checked={formData.allowOverlimit === true} 
-                      onChange={e => setFormData({...formData, allowOverlimit: e.target.checked})}
-                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                      type="text" 
+                      value={formData.creditNotes || ''} 
+                      onChange={e => setFormData({...formData, creditNotes: e.target.value})} 
+                      className="w-full p-2.5 clay-input text-xs font-semibold text-slate-800"
+                      placeholder="Contoh: Kesepakatan termin Net 14 Hari dengan maksimal 2 invoice berjalan bersamaan."
                     />
-                    <label htmlFor="allowOverlimitCheck" className="text-xs font-bold text-slate-700 cursor-pointer">
-                      Bypass / Selalu Izinkan Order (Tanpa blokir)
-                    </label>
                   </div>
                 </div>
-              </div>
+              ) : (
+                /* SECTION B: TANPA PLAFON (CASH BEFORE DELIVERY / CBD) */
+                <div className="p-4 bg-sky-100/70 border border-sky-300 rounded-xl space-y-3 animate-in fade-in duration-200">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 rounded-xl bg-sky-200/90 text-sky-800">
+                      <DollarSign className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-black text-sky-950">Skema: Cash Before Delivery (CBD / Tunai di Muka)</h5>
+                      <p className="text-xs text-sky-900 font-medium mt-0.5 leading-relaxed">
+                        Pelanggan ini <strong>tidak mendapatkan plafon limit kredit</strong> (non-tempo). Setiap transaksi Sales Order (SO) wajib dilakukan dengan pembayaran tunai di muka sebelum barang dikirim.
+                      </p>
+                    </div>
+                  </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">Catatan Kesepakatan Plafon Kredit / Ketentuan Sales</label>
-                <input 
-                  type="text" 
-                  value={formData.creditNotes || ''} 
-                  onChange={e => setFormData({...formData, creditNotes: e.target.value})} 
-                  className="w-full p-2.5 clay-input text-xs font-semibold text-slate-800"
-                  placeholder="Contoh: Kesepakatan termin Net 14 Hari dengan maksimal 2 invoice berjalan bersamaan."
-                />
-              </div>
+                  <div>
+                    <label className="block text-xs font-bold text-sky-950 mb-1.5">Catatan Khusus Pembayaran CBD (Opsional)</label>
+                    <input 
+                      type="text" 
+                      value={formData.creditNotes || ''} 
+                      onChange={e => setFormData({...formData, creditNotes: e.target.value})} 
+                      className="w-full p-2.5 clay-input text-xs font-semibold text-slate-800 bg-white"
+                      placeholder="Contoh: Wajib transfer 100% lunas ke rekening BCA sebelum proses loading barang."
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="md:col-span-2">
@@ -411,52 +488,102 @@ export function CustomersManagement({
             </div>
           </div>
           <div className="flex gap-3 justify-end">
-            <button onClick={() => setEditingItem(null)} className="px-5 py-2.5 clay-button-secondary text-slate-700 font-bold text-sm">
+            <button onClick={() => setEditingItem(null)} className="px-5 py-2.5 clay-button-secondary text-slate-700 font-bold text-sm cursor-pointer">
               Batal
             </button>
-            <button onClick={handleSave} className="px-6 py-2.5 clay-button-primary text-white font-bold text-sm">
+            <button onClick={handleSave} className="px-6 py-2.5 clay-button-primary text-white font-bold text-sm cursor-pointer">
               Simpan Data
             </button>
           </div>
         </div>
       )}
 
-      {/* Customer Directory Cards */}
+      {/* Customer Directory Filter & Search */}
       {!editingItem && (
         <>
-          <div className="relative max-w-sm mb-4">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 z-10" />
-            <input 
-              type="text" 
-              placeholder="Cari nama perusahaan, toko, kontak, email..." 
-              value={search} 
-              onChange={(e) => setSearch(e.target.value)} 
-              className="w-full pl-10 pr-4 py-2.5 clay-input text-xs font-semibold" 
-            />
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-4">
+            <div className="relative max-w-sm w-full">
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 z-10" />
+              <input 
+                type="text" 
+                placeholder="Cari nama perusahaan, toko, kontak, email..." 
+                value={search} 
+                onChange={(e) => setSearch(e.target.value)} 
+                className="w-full pl-10 pr-4 py-2.5 clay-input text-xs font-semibold" 
+              />
+            </div>
+
+            {/* Filter Tabs: Semua / Plafon / CBD */}
+            <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200 self-start sm:self-auto">
+              <button
+                onClick={() => setCategoryFilter('ALL')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  categoryFilter === 'ALL'
+                    ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Semua ({customers.length})
+              </button>
+              <button
+                onClick={() => setCategoryFilter('PLAFON')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  categoryFilter === 'PLAFON'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Plafon Kredit ({plafonCustomersCount})
+              </button>
+              <button
+                onClick={() => setCategoryFilter('CBD')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  categoryFilter === 'CBD'
+                    ? 'bg-sky-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Cash Before Delivery ({cbdCustomersCount})
+              </button>
+            </div>
           </div>
 
           <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             {filteredCustomers.map((customer) => {
               const stats = getCustomerQuoteStats(customer.name);
               const creditStatus = getCustomerCreditStatus(customer, customers, quotations);
+              const isCbd = !creditStatus.hasCreditLimit;
 
               return (
                 <div key={customer.id} className="clay-card clay-card-hover p-6 group flex flex-col justify-between relative overflow-hidden">
                   <div>
                     <div className="flex justify-between items-start mb-3 relative z-10">
-                      <div className="px-3 py-1 clay-badge bg-white text-slate-800 text-[10px] font-black uppercase tracking-wider">
-                        {customer.id}
+                      <div className="flex items-center gap-2">
+                        <div className="px-3 py-1 clay-badge bg-white text-slate-800 text-[10px] font-black uppercase tracking-wider">
+                          {customer.id}
+                        </div>
+                        {isCbd ? (
+                          <span className="px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-900 border border-sky-300 text-[10px] font-black">
+                            💵 Cash Before Delivery
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-200 text-[10px] font-black">
+                            💳 Plafon Kredit
+                          </span>
+                        )}
                       </div>
+
                       <div className="flex gap-1.5 opacity-90 md:opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
                           onClick={() => setSelectedCustomerForHistory(customer)}
-                          className="p-2 clay-button-secondary text-indigo-700" 
+                          className="p-2 clay-button-secondary text-indigo-700 cursor-pointer" 
                           title="Lihat Histori Penawaran & SO"
                         >
                           <History className="w-3.5 h-3.5" />
                         </button>
                         <button 
                           onClick={() => { 
+                            const custHasLimit = customer.hasCreditLimit !== false && (customer.creditLimit ?? 0) > 0;
                             setFormData({
                               name: customer.name,
                               storeName: customer.storeName || '',
@@ -465,14 +592,15 @@ export function CustomersManagement({
                               phone: customer.phone || '',
                               address: customer.address || '',
                               npwp: customer.npwp || '',
-                              creditLimit: customer.creditLimit ?? 50000000,
+                              hasCreditLimit: custHasLimit,
+                              creditLimit: customer.creditLimit ?? (custHasLimit ? 50000000 : 0),
                               warningThresholdPct: customer.warningThresholdPct ?? 10,
                               allowOverlimit: customer.allowOverlimit ?? false,
                               creditNotes: customer.creditNotes || ''
                             }); 
                             setEditingItem(customer); 
                           }} 
-                          className="p-2 clay-button-secondary text-blue-700" 
+                          className="p-2 clay-button-secondary text-blue-700 cursor-pointer" 
                           title="Edit Pelanggan & Plafon"
                         >
                           <Edit className="w-3.5 h-3.5" />
@@ -485,7 +613,7 @@ export function CustomersManagement({
                             logActivity('DELETE_CUSTOMER', `Hapus ${customer.name}`); 
                             syncToCloud('deleteCustomer', 'customer', { id: customer.id }); 
                           })} 
-                          className="p-2 clay-button-secondary text-rose-700" 
+                          className="p-2 clay-button-secondary text-rose-700 cursor-pointer" 
                           title="Hapus"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -508,52 +636,73 @@ export function CustomersManagement({
                       </p>
                     )}
 
-                    {/* Credit Limit & Status Bar Widget */}
-                    <div className="p-3 my-3 bg-slate-50/90 rounded-xl border border-slate-200 space-y-2">
-                      <div className="flex justify-between items-center text-xs font-bold">
-                        <span className="text-slate-600 flex items-center gap-1">
-                          <DollarSign className="w-3.5 h-3.5 text-indigo-600" /> Plafon Kredit:
-                        </span>
-                        <span className="font-black text-slate-900 tabular-nums">
-                          {formatIDR(creditStatus.creditLimit)}
-                        </span>
-                      </div>
-
-                      {/* Progress bar */}
-                      <div>
-                        <div className="flex justify-between items-center text-[10px] font-black mb-1">
-                          <span className="text-slate-500">Terpakai ({creditStatus.activeSoCount} SO Aktif)</span>
-                          <span className={`${creditStatus.isExhausted ? 'text-rose-600' : creditStatus.isNearExhaustion ? 'text-amber-600' : 'text-emerald-700'}`}>
-                            Sisa: {formatIDR(creditStatus.remainingCredit)} ({Math.round(creditStatus.remainingPercentage)}%)
+                    {/* Credit Limit / CBD Status Widget */}
+                    {isCbd ? (
+                      <div className="p-3 my-3 bg-sky-50/90 rounded-xl border border-sky-200 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs font-bold">
+                          <span className="text-sky-900 flex items-center gap-1">
+                            <DollarSign className="w-3.5 h-3.5 text-sky-600" /> Skema Transaksi:
+                          </span>
+                          <span className="font-black text-sky-950 bg-sky-100/90 px-2 py-0.5 rounded-md border border-sky-200 text-[10px]">
+                            Cash Before Delivery
                           </span>
                         </div>
-                        <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full transition-all ${
-                              creditStatus.isExhausted 
-                                ? 'bg-rose-500' 
-                                : creditStatus.isNearExhaustion 
-                                ? 'bg-amber-500' 
-                                : 'bg-emerald-500'
-                            }`}
-                            style={{ width: `${Math.min(100, creditStatus.usedPercentage)}%` }}
-                          />
-                        </div>
+                        <p className="text-[11px] text-sky-900 font-semibold leading-relaxed">
+                          Pembayaran lunas diterima di muka sebelum pengiriman pesanan (Non-Tempo).
+                        </p>
+                        {customer.creditNotes && (
+                          <p className="text-[10px] text-slate-600 italic border-t border-sky-200/60 pt-1">
+                            {customer.creditNotes}
+                          </p>
+                        )}
                       </div>
+                    ) : (
+                      <div className="p-3 my-3 bg-slate-50/90 rounded-xl border border-slate-200 space-y-2">
+                        <div className="flex justify-between items-center text-xs font-bold">
+                          <span className="text-slate-600 flex items-center gap-1">
+                            <DollarSign className="w-3.5 h-3.5 text-indigo-600" /> Plafon Kredit:
+                          </span>
+                          <span className="font-black text-slate-900 tabular-nums">
+                            {formatIDR(creditStatus.creditLimit)}
+                          </span>
+                        </div>
 
-                      {/* Alert banner on customer card */}
-                      {creditStatus.isExhausted ? (
-                        <div className="p-1.5 rounded-lg bg-rose-100 text-rose-900 text-[10px] font-black flex items-center gap-1 border border-rose-300">
-                          <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                          <span>Plafon Habis! SO baru memerlukan persetujuan Manager</span>
+                        {/* Progress bar */}
+                        <div>
+                          <div className="flex justify-between items-center text-[10px] font-black mb-1">
+                            <span className="text-slate-500">Terpakai ({creditStatus.activeSoCount} SO Aktif)</span>
+                            <span className={`${creditStatus.isExhausted ? 'text-rose-600' : creditStatus.isNearExhaustion ? 'text-amber-600' : 'text-emerald-700'}`}>
+                              Sisa: {formatIDR(creditStatus.remainingCredit)} ({Math.round(creditStatus.remainingPercentage)}%)
+                            </span>
+                          </div>
+                          <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full transition-all ${
+                                creditStatus.isExhausted 
+                                  ? 'bg-rose-500' 
+                                  : creditStatus.isNearExhaustion 
+                                  ? 'bg-amber-500' 
+                                  : 'bg-emerald-500'
+                              }`}
+                              style={{ width: `${Math.min(100, creditStatus.usedPercentage)}%` }}
+                            />
+                          </div>
                         </div>
-                      ) : creditStatus.isNearExhaustion ? (
-                        <div className="p-1.5 rounded-lg bg-amber-100 text-amber-950 text-[10px] font-black flex items-center gap-1 border border-amber-300">
-                          <AlertTriangle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                          <span>Peringatan: Sisa limit ≤ {creditStatus.warningThresholdPct}%!</span>
-                        </div>
-                      ) : null}
-                    </div>
+
+                        {/* Alert banner on customer card */}
+                        {creditStatus.isExhausted ? (
+                          <div className="p-1.5 rounded-lg bg-rose-100 text-rose-900 text-[10px] font-black flex items-center gap-1 border border-rose-300">
+                            <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                            <span>Plafon Habis! SO baru memerlukan persetujuan Manager</span>
+                          </div>
+                        ) : creditStatus.isNearExhaustion ? (
+                          <div className="p-1.5 rounded-lg bg-amber-100 text-amber-950 text-[10px] font-black flex items-center gap-1 border border-amber-300">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                            <span>Peringatan: Sisa limit ≤ {creditStatus.warningThresholdPct}%!</span>
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
 
                     <div className="space-y-1.5 text-xs text-slate-600 font-medium my-2">
                       {customer.email && (
@@ -589,7 +738,7 @@ export function CustomersManagement({
                     {onNewQuotationForCustomer && (
                       <button 
                         onClick={() => onNewQuotationForCustomer(customer)}
-                        className="w-full py-2 clay-button-primary text-white text-xs font-black flex items-center justify-center gap-1.5"
+                        className="w-full py-2 clay-button-primary text-white text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" /> Buat Penawaran / SO Baru
                       </button>
@@ -609,13 +758,13 @@ export function CustomersManagement({
             <div className="p-5 border-b border-slate-200/80 bg-slate-900 text-white flex justify-between items-center">
               <div>
                 <h3 className="text-base font-black text-white flex items-center gap-2">
-                  <History className="w-5 h-5 text-emerald-400" /> Histori Transaksi & Plafon Kredit Pelanggan
+                  <History className="w-5 h-5 text-emerald-400" /> Histori Transaksi Pelanggan
                 </h3>
                 <p className="text-xs text-slate-300 font-bold mt-0.5">{selectedCustomerForHistory.name}</p>
               </div>
               <button 
                 onClick={() => setSelectedCustomerForHistory(null)}
-                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white"
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -628,20 +777,32 @@ export function CustomersManagement({
 
                 return (
                   <>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-[#e9eff6] rounded-2xl border border-slate-200">
-                      <div>
-                        <p className="text-[10px] uppercase font-black text-slate-500">Plafon Batas Kredit</p>
-                        <p className="text-lg font-black text-indigo-900 tabular-nums">{formatIDR(creditStatus.creditLimit)}</p>
+                    {!creditStatus.hasCreditLimit ? (
+                      <div className="p-4 bg-sky-50 rounded-2xl border border-sky-200 flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-sky-100 text-sky-800">
+                          <DollarSign className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-sky-950">Skema: Cash Before Delivery (CBD / Tunai di Muka)</p>
+                          <p className="text-xs text-sky-800 font-medium">Pelanggan tidak memiliki plafon kredit tempo. Seluruh order diproses dengan pembayaran sebelum kirim.</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-[10px] uppercase font-black text-slate-500">Kredit Terpakai (SO Aktif)</p>
-                        <p className="text-lg font-black text-rose-700 tabular-nums">{formatIDR(creditStatus.usedCredit)}</p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-[#e9eff6] rounded-2xl border border-slate-200">
+                        <div>
+                          <p className="text-[10px] uppercase font-black text-slate-500">Plafon Batas Kredit</p>
+                          <p className="text-lg font-black text-indigo-900 tabular-nums">{formatIDR(creditStatus.creditLimit)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase font-black text-slate-500">Kredit Terpakai (SO Aktif)</p>
+                          <p className="text-lg font-black text-rose-700 tabular-nums">{formatIDR(creditStatus.usedCredit)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase font-black text-emerald-700">Sisa Plafon Tersedia</p>
+                          <p className="text-lg font-black text-emerald-700 tabular-nums">{formatIDR(creditStatus.remainingCredit)}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-[10px] uppercase font-black text-emerald-700">Sisa Plafon Tersedia</p>
-                        <p className="text-lg font-black text-emerald-700 tabular-nums">{formatIDR(creditStatus.remainingCredit)}</p>
-                      </div>
-                    </div>
+                    )}
 
                     <h4 className="text-xs font-black uppercase text-slate-600 tracking-wider">
                       Daftar Dokumen Transaksi ({hist.quotes.length})

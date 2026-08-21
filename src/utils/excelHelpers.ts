@@ -392,7 +392,9 @@ export const downloadCustomerExcelTemplate = (): void => {
       'Email': 'procurement@agromakmur.co.id',
       'Telepon': '081234567890',
       'Alamat': 'Jl. Industri Raya No. 45, Jakarta Barat',
-      'NPWP': '01.234.567.8-012.000'
+      'NPWP': '01.234.567.8-012.000',
+      'Skema Pembayaran': 'Plafon Kredit',
+      'Plafon Kredit (Rp)': 100000000
     },
     {
       'ID Pelanggan': '',
@@ -401,7 +403,9 @@ export const downloadCustomerExcelTemplate = (): void => {
       'Email': 'info@berkahsentosa.com',
       'Telepon': '089876543210',
       'Alamat': 'Jl. Ahmad Yani No. 12, Bandung',
-      'NPWP': '02.345.678.9-123.000'
+      'NPWP': '02.345.678.9-123.000',
+      'Skema Pembayaran': 'Cash Before Delivery',
+      'Plafon Kredit (Rp)': 0
     }
   ];
 
@@ -440,6 +444,16 @@ export const downloadCustomerExcelTemplate = (): void => {
       'Kolom': 'NPWP',
       'Wajib': 'Tidak',
       'Penjelasan': 'Nomor Pokok Wajib Pajak perusahaan.'
+    },
+    {
+      'Kolom': 'Skema Pembayaran',
+      'Wajib': 'Tidak',
+      'Penjelasan': 'Pilih "Plafon Kredit" untuk tempo piutang, atau "Cash Before Delivery" (CBD) untuk bayar sebelum kirim tanpa limit.'
+    },
+    {
+      'Kolom': 'Plafon Kredit (Rp)',
+      'Wajib': 'Tidak',
+      'Penjelasan': 'Nominal plafon batas kredit dalam angka (misal: 50000000). Kosongkan jika skema Cash Before Delivery.'
     }
   ];
 
@@ -454,7 +468,9 @@ export const downloadCustomerExcelTemplate = (): void => {
     { wch: 28 },
     { wch: 16 },
     { wch: 45 },
-    { wch: 22 }
+    { wch: 22 },
+    { wch: 24 },
+    { wch: 20 }
   ];
 
   wsGuide['!cols'] = [
@@ -473,15 +489,20 @@ export const downloadCustomerExcelTemplate = (): void => {
  * Export current customers to formatted Excel file
  */
 export const exportCustomersToExcel = (customers: Customer[], filename = `Master_Pelanggan_SRA_${new Date().toISOString().split('T')[0]}.xlsx`): void => {
-  const exportRows = customers.map(c => ({
-    'ID Pelanggan': c.id,
-    'Nama Perusahaan': c.name,
-    'Nama Toko / Supermarket / Outlet': c.storeName || '',
-    'Email': c.email || '',
-    'Telepon': c.phone || '',
-    'Alamat': c.address || '',
-    'NPWP': c.npwp || ''
-  }));
+  const exportRows = customers.map(c => {
+    const isCbd = c.hasCreditLimit === false || (c.hasCreditLimit === undefined && (c.creditLimit ?? 0) <= 0);
+    return {
+      'ID Pelanggan': c.id,
+      'Nama Perusahaan': c.name,
+      'Nama Toko / Supermarket / Outlet': c.storeName || '',
+      'Email': c.email || '',
+      'Telepon': c.phone || '',
+      'Alamat': c.address || '',
+      'NPWP': c.npwp || '',
+      'Skema Pembayaran': isCbd ? 'Cash Before Delivery (CBD)' : 'Plafon Kredit',
+      'Plafon Kredit (Rp)': isCbd ? 0 : (c.creditLimit ?? 50000000)
+    };
+  });
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(exportRows);
@@ -493,7 +514,9 @@ export const exportCustomersToExcel = (customers: Customer[], filename = `Master
     { wch: 28 },
     { wch: 16 },
     { wch: 50 },
-    { wch: 22 }
+    { wch: 22 },
+    { wch: 28 },
+    { wch: 20 }
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, 'Data Pelanggan');
@@ -569,6 +592,14 @@ export const parseCustomersExcelFile = async (file: File, existingCustomers: Cus
           const phone = String(getVal(row, ['telepon', 'phone', 'hp', 'whatsapp', 'no telp'])).trim();
           const address = String(getVal(row, ['alamat', 'address'])).trim();
           const npwp = String(getVal(row, ['npwp', 'no npwp'])).trim();
+          const skemaRaw = String(getVal(row, ['skema pembayaran', 'skema', 'payment scheme', 'tipe pembayaran'])).trim().toLowerCase();
+          const creditLimitRaw = Number(getVal(row, ['plafon kredit (rp)', 'plafon kredit', 'plafon', 'credit limit', 'limit'])) || 0;
+
+          // Determine hasCreditLimit
+          let hasCreditLimit = true;
+          if (skemaRaw.includes('cbd') || skemaRaw.includes('cash before') || skemaRaw.includes('tanpa plafon') || (skemaRaw === '' && creditLimitRaw === 0 && (getVal(row, ['plafon kredit (rp)', 'plafon kredit', 'plafon']) !== ''))) {
+            hasCreditLimit = false;
+          }
 
           if (!name) {
             invalidCount++;
@@ -608,7 +639,9 @@ export const parseCustomersExcelFile = async (file: File, existingCustomers: Cus
             email,
             phone,
             address,
-            npwp
+            npwp,
+            hasCreditLimit,
+            creditLimit: hasCreditLimit ? (creditLimitRaw > 0 ? creditLimitRaw : (existing?.creditLimit ?? 50000000)) : 0
           };
 
           customersToSave.push(custObj);

@@ -252,6 +252,11 @@ export function CreateQuotation({
           address: selected.address || '', 
           npwp: selected.npwp || '' 
         }); 
+        if (selected.hasCreditLimit === false) {
+          setPaymentTerm('CBD (Cash Before Delivery)');
+          const newDueDate = calculateDueDate(orderDate, 'CBD (Cash Before Delivery)');
+          setDueDate(newDueDate);
+        }
       }
     } else { 
       setCustomer({ name: '', storeName: '', attnName: '', phone: '', email: '', address: '', npwp: '' }); 
@@ -411,6 +416,8 @@ export function CreateQuotation({
     if (customerMode === 'CUSTOM') {
       return {
         customerName: customer.name || 'Pelanggan Baru',
+        hasCreditLimit: true,
+        isCBD: false,
         creditLimit: customCreditLimit,
         usedCredit: 0,
         remainingCredit: customCreditLimit,
@@ -418,6 +425,7 @@ export function CreateQuotation({
         remainingPercentage: 100,
         isExhausted: false,
         isNearExhaustion: false,
+        hasExceededLimit: false,
         warningThresholdPct: 10,
         activeSoCount: 0,
         activeOrders: [],
@@ -828,11 +836,14 @@ export function CreateQuotation({
               className="w-full p-3.5 clay-input font-bold text-slate-900 text-sm outline-none cursor-pointer"
             >
               <option value="" className="text-slate-400">-- Pilih Pelanggan Dari Database --</option>
-              {customers.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.name}{c.storeName ? ` (${c.storeName})` : ''} • Plafon: {formatIDR(c.creditLimit ?? 50000000)}
-                </option>
-              ))}
+              {customers.map(c => {
+                const isCbd = c.hasCreditLimit === false || (c.hasCreditLimit === undefined && (c.creditLimit ?? 0) <= 0);
+                return (
+                  <option key={c.id} value={c.id}>
+                    {c.name}{c.storeName ? ` (${c.storeName})` : ''} • {isCbd ? '💵 Cash Before Delivery (CBD)' : `💳 Plafon: ${formatIDR(c.creditLimit ?? 50000000)}`}
+                  </option>
+                );
+              })}
             </select>
           </div>
         ) : (
@@ -865,81 +876,108 @@ export function CreateQuotation({
           </div>
         )}
 
-        {/* Real-time Customer Credit Status Widget */}
+        {/* Real-time Customer Credit Status / CBD Widget */}
         {customer.name.trim() && (
           <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-3">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200">
-                  <DollarSign className="w-4 h-4" />
+            {!creditStatus.hasCreditLimit ? (
+              /* CBD (CASH BEFORE DELIVERY) WIDGET */
+              <div className="p-3 bg-sky-50 rounded-xl border border-sky-200 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-sky-100 text-sky-800 border border-sky-200">
+                    <DollarSign className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-sky-950 flex items-center gap-1.5">
+                      <span>Skema Pembayaran:</span>
+                      <span className="text-sky-900">{customer.name}</span>
+                    </h4>
+                    <p className="text-[10px] text-sky-800 font-semibold">
+                      Pelanggan Cash Before Delivery (CBD) — Pembayaran lunas sebelum pesanan dikirim (Tanpa batasan plafon kredit).
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-xs font-black text-slate-900">
-                    Status Plafon Transaksi: <span className="text-indigo-900">{customer.name}</span>
-                    {customerMode === 'CUSTOM' && (
-                      <span className="ml-2 px-2 py-0.5 bg-purple-100 text-purple-800 text-[10px] rounded-full font-black">
-                        Custom Customer
-                      </span>
-                    )}
-                  </h4>
-                  <p className="text-[10px] text-slate-500 font-bold">
-                    {creditStatus.activeSoCount} Transaksi SO Aktif Belum Lunas
-                  </p>
-                </div>
-              </div>
 
-              <div className="text-right">
-                <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black border ${
-                  creditStatus.isExhausted
-                    ? 'bg-rose-100 text-rose-900 border-rose-300'
-                    : creditStatus.isNearExhaustion
-                    ? 'bg-amber-100 text-amber-900 border-amber-300'
-                    : 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                }`}>
-                  {creditStatus.isExhausted 
-                    ? '⛔ Plafon Habis' 
-                    : creditStatus.isNearExhaustion 
-                    ? `⚠️ Sisa ≤ ${creditStatus.warningThresholdPct}%` 
-                    : '✅ Plafon Tersedia'}
+                <span className="px-3 py-1 rounded-xl text-[10px] font-black bg-sky-100 text-sky-900 border border-sky-300 self-start sm:self-auto">
+                  💵 Cash Before Delivery
                 </span>
               </div>
-            </div>
+            ) : (
+              /* PLAFON KREDIT WIDGET */
+              <>
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200">
+                      <DollarSign className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900">
+                        Status Plafon Transaksi: <span className="text-indigo-900">{customer.name}</span>
+                        {customerMode === 'CUSTOM' && (
+                          <span className="ml-2 px-2 py-0.5 bg-purple-100 text-purple-800 text-[10px] rounded-full font-black">
+                            Custom Customer
+                          </span>
+                        )}
+                      </h4>
+                      <p className="text-[10px] text-slate-500 font-bold">
+                        {creditStatus.activeSoCount} Transaksi SO Aktif Belum Lunas
+                      </p>
+                    </div>
+                  </div>
 
-            {/* Credit Numbers Breakdown */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-              <div>
-                <p className="text-[10px] uppercase font-black text-slate-500">Plafon Transaksi</p>
-                <p className="text-sm font-black text-slate-900 tabular-nums">{formatIDR(creditStatus.creditLimit)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase font-black text-slate-500">Terpakai Saat Ini</p>
-                <p className="text-sm font-black text-rose-700 tabular-nums">{formatIDR(creditStatus.usedCredit)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase font-black text-emerald-700">Sisa Plafon Tersedia</p>
-                <p className="text-sm font-black text-emerald-700 tabular-nums">{formatIDR(creditStatus.remainingCredit)}</p>
-              </div>
-            </div>
+                  <div className="text-right">
+                    <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black border ${
+                      creditStatus.isExhausted
+                        ? 'bg-rose-100 text-rose-900 border-rose-300'
+                        : creditStatus.isNearExhaustion
+                        ? 'bg-amber-100 text-amber-900 border-amber-300'
+                        : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                    }`}>
+                      {creditStatus.isExhausted 
+                        ? '⛔ Plafon Habis' 
+                        : creditStatus.isNearExhaustion 
+                        ? `⚠️ Sisa ≤ ${creditStatus.warningThresholdPct}%` 
+                        : '✅ Plafon Tersedia'}
+                    </span>
+                  </div>
+                </div>
 
-            {/* Visual Progress Bar */}
-            <div>
-              <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1">
-                <span>Terpakai: {Math.round(creditStatus.usedPercentage)}%</span>
-                <span>Sisa: {Math.round(creditStatus.remainingPercentage)}%</span>
-              </div>
-              <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                <div 
-                  className={`h-full transition-all ${
-                    creditStatus.isExhausted 
-                      ? 'bg-rose-500' 
-                      : creditStatus.isNearExhaustion 
-                      ? 'bg-amber-500' 
-                      : 'bg-emerald-500'
-                  }`}
-                  style={{ width: `${Math.min(100, creditStatus.usedPercentage)}%` }}
-                />
-              </div>
-            </div>
+                {/* Credit Numbers Breakdown */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                  <div>
+                    <p className="text-[10px] uppercase font-black text-slate-500">Plafon Transaksi</p>
+                    <p className="text-sm font-black text-slate-900 tabular-nums">{formatIDR(creditStatus.creditLimit)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-black text-slate-500">Terpakai Saat Ini</p>
+                    <p className="text-sm font-black text-rose-700 tabular-nums">{formatIDR(creditStatus.usedCredit)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-black text-emerald-700">Sisa Plafon Tersedia</p>
+                    <p className="text-sm font-black text-emerald-700 tabular-nums">{formatIDR(creditStatus.remainingCredit)}</p>
+                  </div>
+                </div>
+
+                {/* Visual Progress Bar */}
+                <div>
+                  <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1">
+                    <span>Terpakai: {Math.round(creditStatus.usedPercentage)}%</span>
+                    <span>Sisa: {Math.round(creditStatus.remainingPercentage)}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full transition-all ${
+                        creditStatus.isExhausted 
+                          ? 'bg-rose-500' 
+                          : creditStatus.isNearExhaustion 
+                          ? 'bg-amber-500' 
+                          : 'bg-emerald-500'
+                      }`}
+                      style={{ width: `${Math.min(100, creditStatus.usedPercentage)}%` }}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -1619,16 +1657,25 @@ export function CreateQuotation({
 
             {docType === 'SALES_ORDER' && (
               <div className="pt-3 border-t border-slate-300 text-xs space-y-1.5">
-                <div className="flex justify-between text-slate-600 font-bold">
-                  <span>Sisa Limit Saat Ini:</span>
-                  <span className="tabular-nums">{formatIDR(creditStatus.remainingCredit)}</span>
-                </div>
-                <div className="flex justify-between font-black">
-                  <span>Sisa Setelah Order:</span>
-                  <span className={`tabular-nums ${orderCheck.allowed ? 'text-emerald-700' : 'text-rose-700'}`}>
-                    {orderCheck.allowed ? formatIDR(remainingAfterOrder) : `Defisit ${formatIDR(orderCheck.deficit)}`}
-                  </span>
-                </div>
+                {!creditStatus.hasCreditLimit ? (
+                  <div className="flex justify-between text-sky-900 font-bold bg-sky-100/70 px-2.5 py-1.5 rounded-xl border border-sky-200">
+                    <span>Ketentuan Pembayaran:</span>
+                    <span className="font-black text-sky-950">Cash Before Delivery</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between text-slate-600 font-bold">
+                      <span>Sisa Limit Saat Ini:</span>
+                      <span className="tabular-nums">{formatIDR(creditStatus.remainingCredit)}</span>
+                    </div>
+                    <div className="flex justify-between font-black">
+                      <span>Sisa Setelah Order:</span>
+                      <span className={`tabular-nums ${orderCheck.allowed ? 'text-emerald-700' : 'text-rose-700'}`}>
+                        {orderCheck.allowed ? formatIDR(remainingAfterOrder) : `Defisit ${formatIDR(orderCheck.deficit)}`}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>

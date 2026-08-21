@@ -511,17 +511,18 @@ export const getDueReminderInfo = (
 
 export interface CustomerCreditStatus {
   customerName: string;
+  hasCreditLimit: boolean; // True jika pakai plafon tempo, False jika Cash Before Delivery (CBD)
   creditLimit: number;
   usedCredit: number;
   remainingCredit: number;
   usedPercentage: number;
   remainingPercentage: number;
-  isExhausted: boolean; // Sisa limit <= 0
-  isNearExhaustion: boolean; // Sisa limit <= warningThreshold (misal <= 10%)
+  isExhausted: boolean; // Sisa limit <= 0 (hanya untuk pelanggan dengan plafon)
+  isNearExhaustion: boolean; // Sisa limit <= warningThreshold
   warningThresholdPct: number;
   activeSoCount: number;
   activeUnpaidSos: Quotation[];
-  canMakeOrder: (newAmount: number) => { allowed: boolean; deficit: number; reason?: string };
+  canMakeOrder: (newAmount: number) => { allowed: boolean; deficit: number; isCBD?: boolean; reason?: string };
 }
 
 export const getCustomerCreditStatus = (
@@ -538,8 +539,14 @@ export const getCustomerCreditStatus = (
   }
 
   const customerName = custObj?.name || (typeof customer === 'string' ? customer : 'Pelanggan');
-  // Default credit limit if not explicitly defined (e.g. 50,000,000 IDR)
-  const creditLimit = typeof custObj?.creditLimit === 'number' ? custObj.creditLimit : 50000000;
+  
+  // Plafond enabled flag (default true if customer exists and hasCreditLimit is not explicitly false, or if creditLimit > 0)
+  const hasCreditLimit = custObj ? (custObj.hasCreditLimit ?? ((custObj.creditLimit ?? 50000000) > 0)) : true;
+  
+  // Default credit limit if enabled
+  const creditLimit = hasCreditLimit 
+    ? (typeof custObj?.creditLimit === 'number' ? custObj.creditLimit : 50000000) 
+    : 0;
   const warningThresholdPct = custObj?.warningThresholdPct ?? 10;
 
   // Active unpaid SOs reduce the available limit
@@ -553,6 +560,31 @@ export const getCustomerCreditStatus = (
   });
 
   const usedCredit = activeUnpaidSos.reduce((sum, q) => sum + (Number(q.total) || 0), 0);
+  
+  if (!hasCreditLimit) {
+    // Non-Plafond Customer (Cash Before Delivery / CBD)
+    return {
+      customerName,
+      hasCreditLimit: false,
+      creditLimit: 0,
+      usedCredit,
+      remainingCredit: 0,
+      usedPercentage: 0,
+      remainingPercentage: 100,
+      isExhausted: false,
+      isNearExhaustion: false,
+      warningThresholdPct,
+      activeSoCount: activeUnpaidSos.length,
+      activeUnpaidSos,
+      canMakeOrder: (_newAmount: number) => ({
+        allowed: true,
+        deficit: 0,
+        isCBD: true,
+        reason: 'Pelanggan Cash Before Delivery (CBD) — Pembayaran wajib diterima penuh sebelum pesanan dikirim.'
+      })
+    };
+  }
+
   const remainingCredit = Math.max(0, creditLimit - usedCredit);
   const usedPercentage = creditLimit > 0 ? Math.min(100, (usedCredit / creditLimit) * 100) : 0;
   const remainingPercentage = creditLimit > 0 ? Math.max(0, 100 - usedPercentage) : 100;
@@ -565,8 +597,11 @@ export const getCustomerCreditStatus = (
       return { allowed: true, deficit: 0 };
     }
     if (creditLimit <= 0) {
-      // If credit limit set to 0 and not override, cash only
-      return { allowed: false, deficit: newAmount, reason: 'Plafon kredit customer bernilai Rp 0 (Hanya transaksi Cash/Persetujuan Manager)' };
+      return { 
+        allowed: false, 
+        deficit: newAmount, 
+        reason: 'Plafon kredit customer bernilai Rp 0 (Silakan ubah ke mode Cash Before Delivery / minta persetujuan Manager)' 
+      };
     }
     if (newAmount <= remainingCredit) {
       return { allowed: true, deficit: 0 };
@@ -582,6 +617,7 @@ export const getCustomerCreditStatus = (
 
   return {
     customerName,
+    hasCreditLimit: true,
     creditLimit,
     usedCredit,
     remainingCredit,

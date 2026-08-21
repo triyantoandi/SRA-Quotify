@@ -23,6 +23,7 @@ export interface Customer {
   address: string;
   npwp?: string;
   attnName?: string;
+  hasCreditLimit?: boolean; // True jika ada plafon kredit tempo (Net days), False jika tanpa plafon (Cash Before Delivery / CBD)
   creditLimit?: number; // Plafon batas limit transaksi (IDR)
   warningThresholdPct?: number; // Persentase sisa limit untuk alert (default: 10%)
   allowOverlimit?: boolean; // Otorisasi override limit khusus
