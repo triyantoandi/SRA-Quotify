@@ -9,7 +9,7 @@ import {
   isSupervisoryRole, normalizeRole, checkDocumentOwnership
 } from './utils/helpers';
 import { 
-  subscribeCollection, subscribeDoc, saveFirestoreDoc, deleteFirestoreDoc 
+  subscribeCollection, subscribeDoc, saveFirestoreDoc, deleteFirestoreDoc, clearFirestoreCollection 
 } from './lib/firestoreService';
 import { Toast } from './components/Toast';
 import { ConfirmModal } from './components/ConfirmModal';
@@ -185,6 +185,45 @@ export default function App() {
       isOpen: true, title, message: msg, 
       onConfirm: () => { onConfirm(); setModalState(p => ({ ...p, isOpen: false })); } 
     }); 
+  };
+
+  const handleClearSimulationData = async (options: {
+    clearQuotations: boolean;
+    clearCustomers: boolean;
+    clearItems: boolean;
+    clearLogs: boolean;
+  }) => {
+    if (options.clearQuotations) {
+      setQuotations([]);
+      localStorage.setItem('sra_quo', JSON.stringify([]));
+      localStorage.setItem('sra_cleared_quotations', 'true');
+      await clearFirestoreCollection('quotations');
+    }
+    if (options.clearCustomers) {
+      setCustomers([]);
+      localStorage.setItem('sra_cust', JSON.stringify([]));
+      localStorage.setItem('sra_cleared_customers', 'true');
+      await clearFirestoreCollection('customers');
+    }
+    if (options.clearItems) {
+      setItems([]);
+      localStorage.setItem('sra_itm', JSON.stringify([]));
+      localStorage.setItem('sra_cleared_items', 'true');
+      await clearFirestoreCollection('items');
+    }
+    if (options.clearLogs) {
+      setActivityLogs([]);
+      localStorage.setItem('sra_log', JSON.stringify([]));
+      localStorage.setItem('sra_cleared_activityLogs', 'true');
+      await clearFirestoreCollection('activityLogs');
+    }
+
+    logActivity('CLEAR_SIMULATION_DATA', `Menghapus data simulasi: ${[
+      options.clearQuotations ? 'Penawaran & SO' : null,
+      options.clearCustomers ? 'Klien' : null,
+      options.clearItems ? 'Katalog Barang' : null,
+      options.clearLogs ? 'Log Aktivitas' : null,
+    ].filter(Boolean).join(', ')}`);
   };
 
   if (!currentUser) {
@@ -520,6 +559,12 @@ export default function App() {
         <SettingsManagement 
           settings={settings} 
           setSettings={setSettings} 
+          currentUser={currentUser}
+          quotations={quotations}
+          customers={customers}
+          items={items}
+          activityLogs={activityLogs}
+          onClearSimulationData={handleClearSimulationData}
           showToast={showToastMsg} 
           logActivity={logActivity} 
           syncToCloud={syncToCloud}

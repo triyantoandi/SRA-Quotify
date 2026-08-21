@@ -1,16 +1,41 @@
 import React, { useState } from 'react';
-import { Building2, Wand2, Save, Database, ShieldCheck } from 'lucide-react';
-import { Settings } from '../types';
+import { Building2, Wand2, Save, Database, ShieldCheck, Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Settings, User, Quotation, Customer, Item, ActivityLog } from '../types';
+import { ClearSimulationDataModal } from './ClearSimulationDataModal';
+import { isSupervisoryRole } from '../utils/helpers';
 
 interface SettingsManagementProps {
   settings: Settings;
   setSettings: (newSettings: Settings) => void;
+  currentUser?: User | null;
+  quotations?: Quotation[];
+  customers?: Customer[];
+  items?: Item[];
+  activityLogs?: ActivityLog[];
+  onClearSimulationData?: (options: {
+    clearQuotations: boolean;
+    clearCustomers: boolean;
+    clearItems: boolean;
+    clearLogs: boolean;
+  }) => Promise<void>;
   showToast: (msg: string, type?: 'success' | 'error') => void;
   logActivity: (action: string, details: string) => void;
   syncToCloud?: (action: string, payloadKey: string, payloadData: any) => void;
 }
 
-export function SettingsManagement({ settings, setSettings, showToast, logActivity, syncToCloud }: SettingsManagementProps) {
+export function SettingsManagement({ 
+  settings, 
+  setSettings, 
+  currentUser,
+  quotations = [],
+  customers = [],
+  items = [],
+  activityLogs = [],
+  onClearSimulationData,
+  showToast, 
+  logActivity, 
+  syncToCloud 
+}: SettingsManagementProps) {
   const [formData, setFormData] = useState<Settings>(settings || {
     companyName: '',
     companyNpwp: '',
@@ -27,6 +52,8 @@ export function SettingsManagement({ settings, setSettings, showToast, logActivi
     apiUrl: ''
   });
 
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
+
   React.useEffect(() => {
     if (settings) {
       setFormData(settings);
@@ -40,6 +67,8 @@ export function SettingsManagement({ settings, setSettings, showToast, logActivi
     syncToCloud?.('saveSettings', 'settings', formData);
   };
 
+  const isManager = isSupervisoryRole(currentUser?.role);
+
   return (
     <div className="max-w-4xl space-y-6 animate-in fade-in duration-300 relative z-10 font-sans">
       <div>
@@ -47,6 +76,7 @@ export function SettingsManagement({ settings, setSettings, showToast, logActivi
         <p className="text-slate-500 text-sm font-semibold mt-0.5">Konfigurasi entitas perusahaan, standar dokumen quotation, dan database Firebase</p>
       </div>
       
+      {/* Company Profile Card */}
       <div className="clay-card p-6 overflow-hidden mb-6">
         <div className="pb-4 border-b border-slate-200/60 mb-5">
           <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
@@ -63,6 +93,7 @@ export function SettingsManagement({ settings, setSettings, showToast, logActivi
         </div>
       </div>
 
+      {/* Document & Database Settings */}
       <div className="clay-card p-6 overflow-hidden mb-6">
         <div className="pb-4 border-b border-slate-200/60 mb-5">
           <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
@@ -81,7 +112,7 @@ export function SettingsManagement({ settings, setSettings, showToast, logActivi
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                 </h4>
                 <p className="text-[11px] text-slate-600 mt-0.5">
-                  Semua data tersimpan otomatis dan persisten di Firebase Firestore. Integrasi eksternal legacy telah dinonaktifkan untuk mencegah konflik database.
+                  Semua data tersimpan otomatis dan persisten di Firebase Firestore. Data real-time disinkronisasi ke seluruh sales & manajer.
                 </p>
               </div>
             </div>
@@ -106,12 +137,61 @@ export function SettingsManagement({ settings, setSettings, showToast, logActivi
         </div>
       </div>
 
-      <div className="flex justify-end pb-8">
-        <button onClick={handleSave} className="px-7 py-3 clay-button-primary text-white font-bold flex items-center gap-2 text-sm">
+      <div className="flex justify-end pb-2">
+        <button onClick={handleSave} className="px-7 py-3 clay-button-primary text-white font-bold flex items-center gap-2 text-sm shadow-md">
           <Save className="w-4 h-4"/> Simpan Konfigurasi
         </button>
       </div>
+
+      {/* Danger Zone: Reset & Clear Simulation Data (Only for Manager / Administrator) */}
+      {isManager && (
+        <div className="clay-card p-6 overflow-hidden border border-rose-200/80 bg-rose-50/30 mb-8">
+          <div className="pb-4 border-b border-rose-200/60 mb-5 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-rose-800">
+              <AlertTriangle className="w-5 h-5 text-rose-600" />
+              <h3 className="text-base font-black tracking-tight text-rose-950">
+                Zona Berbahaya: Pembersihan Data Simulasi
+              </h3>
+            </div>
+            <span className="text-[11px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">
+              Akses Manager / Admin
+            </span>
+          </div>
+
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <p className="text-xs font-bold text-slate-800">
+                Hapus Semua Data Simulasi / Reset Database
+              </p>
+              <p className="text-[11px] text-slate-600 font-medium max-w-xl">
+                Fitur ini membersihkan dokumen penawaran simulasi, daftar klien dummy, katalog produk demo, dan riwayat log aktivitas agar aplikasi bersih untuk pemakaian operasional resmi.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsClearModalOpen(true)}
+              className="px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-2 shrink-0 transition-all hover:scale-102 cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" /> Buka Menu Hapus Data Simulasi
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Clear Simulation Data Modal */}
+      {isClearModalOpen && onClearSimulationData && (
+        <ClearSimulationDataModal
+          isOpen={isClearModalOpen}
+          onClose={() => setIsClearModalOpen(false)}
+          currentUser={currentUser || null}
+          quotations={quotations}
+          customers={customers}
+          items={items}
+          activityLogs={activityLogs}
+          onClearData={onClearSimulationData}
+          showToast={showToast}
+        />
+      )}
     </div>
   );
 }
-

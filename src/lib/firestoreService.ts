@@ -1,5 +1,5 @@
 import { 
-  collection, doc, onSnapshot, setDoc, deleteDoc, getDocFromServer 
+  collection, doc, onSnapshot, setDoc, deleteDoc, getDocFromServer, getDocs, writeBatch 
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 
@@ -78,37 +78,49 @@ export function subscribeCollection<T extends { id: string }>(
   
   const unsubscribe = onSnapshot(colRef, async (snapshot) => {
     try {
-      if (snapshot.empty && initialFallback && initialFallback.length > 0) {
-        onData(initialFallback);
-        // Seed documents to Firestore in background
-        for (const item of initialFallback) {
-          if (item && item.id) {
-            try {
-              const cleanItem = sanitizeForFirestore(item);
-              await setDoc(doc(db, collectionName, String(item.id)), cleanItem, { merge: true });
-            } catch (e) {
-              console.warn(`Error seeding doc ${item.id} in ${collectionName}:`, e);
+      if (snapshot.empty) {
+        // If collection was explicitly initialized or cleared, deliver empty list
+        const wasCleared = localStorage.getItem(`sra_cleared_${collectionName}`);
+        if (!wasCleared && initialFallback && initialFallback.length > 0) {
+          onData(initialFallback);
+          // Seed documents to Firestore in background on first fresh setup
+          for (const item of initialFallback) {
+            if (item && item.id) {
+              try {
+                const cleanItem = sanitizeForFirestore(item);
+                await setDoc(doc(db, collectionName, String(item.id)), cleanItem, { merge: true });
+              } catch (e) {
+                console.warn(`Error seeding doc ${item.id} in ${collectionName}:`, e);
+              }
             }
           }
+        } else {
+          onData([]);
         }
-      } else if (!snapshot.empty) {
+      } else {
         const docsData = snapshot.docs.map(d => ({
           ...d.data(),
           id: d.id
         })) as T[];
         onData(docsData);
-      } else {
-        onData([]);
       }
     } catch (err) {
       console.error(`Error processing snapshot for ${collectionName}:`, err);
       handleFirestoreError(err, OperationType.LIST, collectionName);
-      if (initialFallback) onData(initialFallback);
+      if (initialFallback && !localStorage.getItem(`sra_cleared_${collectionName}`)) {
+        onData(initialFallback);
+      } else {
+        onData([]);
+      }
     }
   }, (err) => {
     console.error(`Firestore subscribe error [${collectionName}]:`, err);
     handleFirestoreError(err, OperationType.LIST, collectionName);
-    if (initialFallback) onData(initialFallback);
+    if (initialFallback && !localStorage.getItem(`sra_cleared_${collectionName}`)) {
+      onData(initialFallback);
+    } else {
+      onData([]);
+    }
   });
 
   return unsubscribe;
@@ -191,6 +203,27 @@ export async function deleteFirestoreDoc(collectionName: string, docId: string) 
   } catch (err) {
     console.error(`Error deleting from Firestore [${collectionName}/${docId}]:`, err);
     handleFirestoreError(err, OperationType.DELETE, `${collectionName}/${docId}`);
+    throw err;
+  }
+}
+
+export async function clearFirestoreCollection(collectionName: string): Promise<number> {
+  try {
+    localStorage.setItem(`sra_cleared_${collectionName}`, 'true');
+    const colRef = collection(db, collectionName);
+    const snapshot = await getDocs(colRef);
+    if (snapshot.empty) return 0;
+    
+    // Batch delete
+    const batch = writeBatch(db);
+    snapshot.docs.forEach((docItem) => {
+      batch.delete(docItem.ref);
+    });
+    await batch.commit();
+    return snapshot.size;
+  } catch (err) {
+    console.error(`Error clearing Firestore collection [${collectionName}]:`, err);
+    handleFirestoreError(err, OperationType.DELETE, collectionName);
     throw err;
   }
 }
