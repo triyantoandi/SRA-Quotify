@@ -273,22 +273,34 @@ export function CreateQuotation({
   const updateItem = (index: number, field: string, value: any) => {
     const newItems = [...quoteItems]; 
     const item = { ...newItems[index] }; 
-    (item as any)[field] = value;
     
-    // Auto calculate tier price only if it's a catalog item and itemId/qty changed
-    if (!item.isCustomItem && (field === 'itemId' || field === 'qty')) {
-      item.unitPrice = calculateTierPrice(item.itemId, Number(item.qty));
-      const catalogItem = items.find(i => i.id === item.itemId);
-      if (catalogItem) {
-        item.itemName = catalogItem.name;
-        item.itemSku = catalogItem.sku;
-        item.itemUnit = catalogItem.unit || 'Dus';
-        item.itemCategory = catalogItem.category || 'General';
+    if (field === 'unitPrice' || field === 'costPrice') {
+      (item as any)[field] = value === '' ? 0 : Number(value);
+    } else if (field === 'qty') {
+      item.qty = value === '' ? ('' as any) : Number(value);
+      // Auto calculate tier price from catalog when qty changes
+      if (!item.isCustomItem && item.itemId) {
+        item.unitPrice = calculateTierPrice(item.itemId, Number(item.qty) || 1);
       }
+    } else if (field === 'itemId') {
+      item.itemId = value;
+      if (!item.isCustomItem) {
+        item.unitPrice = calculateTierPrice(item.itemId, Number(item.qty) || 1);
+        const catalogItem = items.find(i => i.id === item.itemId);
+        if (catalogItem) {
+          item.itemName = catalogItem.name;
+          item.itemSku = catalogItem.sku;
+          item.itemUnit = catalogItem.unit || 'Dus';
+          item.itemCategory = catalogItem.category || 'General';
+        }
+      }
+    } else {
+      (item as any)[field] = value;
     }
 
     const currentQty = Number(item.qty) || 0; 
-    const grossTotal = Number(item.unitPrice || 0) * currentQty;
+    const currentPrice = Number(item.unitPrice) || 0;
+    const grossTotal = currentPrice * currentQty;
     let discountValue = item.itemDiscountType === 'percentage' 
       ? (grossTotal * (Number(item.itemDiscount || 0) / 100)) 
       : Number(item.itemDiscount || 0);
@@ -1407,14 +1419,17 @@ export function CreateQuotation({
                         <label className="block text-[10px] font-black text-purple-950 mb-1 uppercase tracking-wider">
                           Harga Satuan Negosiasi (Rp) *
                         </label>
-                        <input 
-                          type="number" 
-                          min="0" 
-                          value={qi.unitPrice || ''} 
-                          onChange={e => updateItem(index, 'unitPrice', e.target.value)} 
-                          placeholder="0"
-                          className="w-full p-2.5 clay-input text-right font-black text-sm text-purple-950 tabular-nums"
-                        />
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-purple-400">Rp</span>
+                          <input 
+                            type="number" 
+                            min="0" 
+                            value={qi.unitPrice === 0 ? '' : qi.unitPrice} 
+                            onChange={e => updateItem(index, 'unitPrice', e.target.value)} 
+                            placeholder="0"
+                            className="w-full pl-9 pr-3 py-2.5 clay-input text-right font-black text-sm text-purple-950 tabular-nums focus:border-purple-500"
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -1486,110 +1501,103 @@ export function CreateQuotation({
                       </div>
                     </div>
 
-                    {/* Diskon & Subtotal Baris */}
-                    <div className="flex flex-wrap md:flex-nowrap justify-between items-center gap-3 pt-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">Diskon Baris:</span>
-                        <div className="flex gap-1 w-36">
-                          <select 
-                            value={qi.itemDiscountType} 
-                            onChange={e => { updateItem(index, 'itemDiscountType', e.target.value); updateItem(index, 'itemDiscount', 0); }} 
-                            className="w-12 p-1.5 clay-input text-center font-bold text-xs appearance-none"
-                          >
-                            <option value="nominal">Rp</option>
-                            <option value="percentage">%</option>
-                          </select>
-                          <input 
-                            type="number" 
-                            min="0" 
-                            value={qi.itemDiscount || ''} 
-                            onChange={e => updateItem(index, 'itemDiscount', e.target.value)} 
-                            placeholder="0" 
-                            className="w-full p-1.5 clay-input text-right font-bold text-xs tabular-nums"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-slate-600">Subtotal:</span>
-                        <span className="px-3 py-1.5 rounded-xl bg-purple-100 text-purple-950 border border-purple-300 font-black text-sm tabular-nums">
-                          {formatIDR(qi.subtotal)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  /* CATALOG PRICE LIST ITEM FIELDS */
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-                    <div className="md:col-span-5">
-                      <label className="block text-[9px] font-extrabold text-slate-600 mb-1 uppercase tracking-wider">
-                        Pilih Barang dari Katalog
-                      </label>
-                      <ItemSelect 
-                        items={items} 
-                        value={qi.itemId} 
-                        onChange={(val) => updateItem(index, 'itemId', val)} 
-                        onSelectCustomName={(customName) => {
-                          updateItem(index, 'isCustomItem', true);
-                          updateItem(index, 'itemName', customName);
-                          updateItem(index, 'itemId', `SPOT-${Date.now().toString().slice(-4)}`);
-                        }}
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="block text-[9px] font-extrabold text-slate-600 mb-1 uppercase tracking-wider">
-                        Qty
-                      </label>
-                      <input 
-                        type="number" 
-                        min="1" 
-                        value={qi.qty} 
-                        onChange={e => updateItem(index, 'qty', e.target.value)} 
-                        className="w-full p-3 clay-input text-center font-extrabold text-sm tabular-nums"
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="block text-[9px] font-extrabold text-slate-600 mb-1 uppercase tracking-wider">
-                        Harga Tier
-                      </label>
-                      <div className="p-3 clay-badge bg-white text-slate-800 font-extrabold text-right text-sm tabular-nums truncate">
-                        {formatIDR(qi.unitPrice)}
-                      </div>
-                    </div>
-
-                    <div className="md:col-span-3">
-                      <label className="block text-[9px] font-extrabold text-slate-600 mb-1 uppercase tracking-wider">
-                        Diskon Item
-                      </label>
-                      <div className="flex gap-1.5">
-                        <select 
-                          value={qi.itemDiscountType} 
-                          onChange={e => { updateItem(index, 'itemDiscountType', e.target.value); updateItem(index, 'itemDiscount', 0); }} 
-                          className="w-12 p-2.5 clay-input text-center font-bold text-xs appearance-none"
-                        >
-                          <option value="nominal">Rp</option>
-                          <option value="percentage">%</option>
-                        </select>
-                        <input 
-                          type="number" 
-                          min="0" 
-                          value={qi.itemDiscount || ''} 
-                          onChange={e => updateItem(index, 'itemDiscount', e.target.value)} 
-                          placeholder="0" 
-                          className="w-full p-2.5 clay-input text-right font-bold text-sm tabular-nums"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="md:col-span-12 flex justify-end items-center gap-2 pt-1 border-t border-slate-200/60">
-                      <span className="text-xs font-bold text-slate-600">Subtotal:</span>
-                      <span className="px-3 py-1 rounded-xl bg-emerald-50 text-emerald-900 border border-emerald-300 font-extrabold text-sm tabular-nums">
+                    {/* Subtotal Baris Custom */}
+                    <div className="flex justify-end items-center gap-2 pt-1 border-t border-purple-200/60">
+                      <span className="text-xs font-bold text-purple-900">Subtotal:</span>
+                      <span className="px-3 py-1.5 rounded-xl bg-purple-100 text-purple-950 border border-purple-300 font-black text-sm tabular-nums">
                         {formatIDR(qi.subtotal)}
                       </span>
                     </div>
                   </div>
+                ) : (
+                  /* CATALOG PRICE LIST ITEM FIELDS */
+                  (() => {
+                    const catalogTierPrice = qi.itemId ? calculateTierPrice(qi.itemId, Number(qi.qty) || 1) : 0;
+                    const isPriceCustomized = qi.itemId && qi.unitPrice > 0 && catalogTierPrice > 0 && Number(qi.unitPrice) !== catalogTierPrice;
+
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                        <div className="md:col-span-5">
+                          <label className="block text-[9px] font-extrabold text-slate-600 mb-1 uppercase tracking-wider">
+                            Pilih Barang dari Katalog
+                          </label>
+                          <ItemSelect 
+                            items={items} 
+                            value={qi.itemId} 
+                            onChange={(val) => updateItem(index, 'itemId', val)} 
+                            onSelectCustomName={(customName) => {
+                              updateItem(index, 'isCustomItem', true);
+                              updateItem(index, 'itemName', customName);
+                              updateItem(index, 'itemId', `SPOT-${Date.now().toString().slice(-4)}`);
+                            }}
+                          />
+                        </div>
+
+                        <div className="md:col-span-2">
+                          <label className="block text-[9px] font-extrabold text-slate-600 mb-1 uppercase tracking-wider">
+                            Qty
+                          </label>
+                          <input 
+                            type="number" 
+                            min="1" 
+                            value={qi.qty} 
+                            onChange={e => updateItem(index, 'qty', e.target.value)} 
+                            className="w-full p-3 clay-input text-center font-extrabold text-sm tabular-nums"
+                          />
+                        </div>
+
+                        <div className="md:col-span-3">
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="block text-[9px] font-extrabold text-slate-600 uppercase tracking-wider">
+                              Harga Satuan (Rp)
+                            </label>
+                            {isPriceCustomized && (
+                              <button
+                                type="button"
+                                onClick={() => updateItem(index, 'unitPrice', catalogTierPrice)}
+                                className="text-[9px] text-blue-600 hover:text-blue-800 font-bold underline cursor-pointer"
+                                title={`Kembalikan ke harga tier standar (${formatIDR(catalogTierPrice)})`}
+                              >
+                                Reset ke Tier
+                              </button>
+                            )}
+                          </div>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">Rp</span>
+                            <input 
+                              type="number" 
+                              min="0" 
+                              value={qi.unitPrice === 0 ? '' : qi.unitPrice} 
+                              onChange={e => updateItem(index, 'unitPrice', e.target.value)} 
+                              placeholder="0"
+                              className={`w-full pl-9 pr-3 py-2.5 clay-input text-right font-black text-sm tabular-nums ${
+                                isPriceCustomized ? 'border-amber-400 bg-amber-50/50 text-amber-950' : 'text-slate-900'
+                              }`}
+                            />
+                          </div>
+                          {catalogTierPrice > 0 && (
+                            <div className="flex items-center justify-between text-[10px] text-slate-500 font-semibold mt-1">
+                              <span>Tier Katalog: <strong className="text-slate-700">{formatIDR(catalogTierPrice)}</strong></span>
+                              {isPriceCustomized && (
+                                <span className="px-1.5 py-0.2 bg-amber-100 text-amber-900 rounded font-black text-[9px]">
+                                  Manual Edit
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="md:col-span-2">
+                          <label className="block text-[9px] font-extrabold text-slate-600 mb-1 uppercase tracking-wider text-right">
+                            Subtotal
+                          </label>
+                          <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-950 border border-emerald-300 font-black text-right text-sm tabular-nums truncate shadow-xs">
+                            {formatIDR(qi.subtotal)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()
                 )}
               </div>
             );
