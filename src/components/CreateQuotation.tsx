@@ -161,6 +161,8 @@ export function CreateQuotation({
           ? initialItemsList.map((i, idx) => {
               const matchedCatalogItem = (items || []).find(it => it.id === i.itemId);
               const isCustom = i.isCustomItem ?? (!matchedCatalogItem || i.itemId.startsWith('SPOT-') || i.itemId.startsWith('CUSTOM-'));
+              const itemQty = Number(i.qty) || 1;
+              const itemPrice = Number(i.unitPrice) || 0;
               return { 
                 ...i, 
                 id: Date.now() + idx, 
@@ -171,8 +173,11 @@ export function CreateQuotation({
                 itemCategory: i.itemCategory || matchedCatalogItem?.category || 'General',
                 itemDescription: i.itemDescription || matchedCatalogItem?.description || '',
                 costPrice: i.costPrice || 0,
-                itemDiscount: i?.itemDiscount || 0, 
-                itemDiscountType: i?.itemDiscountType || 'nominal' 
+                qty: itemQty,
+                unitPrice: itemPrice,
+                subtotal: itemQty * itemPrice,
+                itemDiscount: 0, 
+                itemDiscountType: 'nominal' 
               };
             })
           : [{ 
@@ -300,12 +305,9 @@ export function CreateQuotation({
 
     const currentQty = Number(item.qty) || 0; 
     const currentPrice = Number(item.unitPrice) || 0;
-    const grossTotal = currentPrice * currentQty;
-    let discountValue = item.itemDiscountType === 'percentage' 
-      ? (grossTotal * (Number(item.itemDiscount || 0) / 100)) 
-      : Number(item.itemDiscount || 0);
-    
-    item.subtotal = Math.max(0, grossTotal - discountValue);
+    item.itemDiscount = 0;
+    item.itemDiscountType = 'nominal';
+    item.subtotal = currentPrice * currentQty;
     newItems[index] = item;
     setQuoteItems(newItems); 
     setError('');
@@ -520,6 +522,8 @@ export function CreateQuotation({
     const cleanQuoteItems: QuotationItem[] = quoteItems.map((qi, idx) => {
       const catalogItem = items.find(it => it.id === qi.itemId);
       const isCustom = qi.isCustomItem || !catalogItem;
+      const qQty = Number(qi.qty) || 0;
+      const qPrice = Number(qi.unitPrice) || 0;
       return {
         id: qi.id || Date.now() + idx,
         itemId: isCustom ? (qi.itemId || `SPOT-${idx + 1}`) : qi.itemId,
@@ -530,11 +534,11 @@ export function CreateQuotation({
         itemCategory: isCustom ? (qi.itemCategory || 'Spot Market') : (catalogItem?.category || 'General'),
         itemDescription: qi.itemDescription || catalogItem?.description || '',
         costPrice: Number(qi.costPrice || 0),
-        qty: Number(qi.qty),
-        unitPrice: Number(qi.unitPrice),
-        subtotal: Number(qi.subtotal),
-        itemDiscount: Number(qi.itemDiscount || 0),
-        itemDiscountType: qi.itemDiscountType || 'nominal'
+        qty: qQty,
+        unitPrice: qPrice,
+        subtotal: qQty * qPrice,
+        itemDiscount: 0,
+        itemDiscountType: 'nominal'
       };
     });
 
